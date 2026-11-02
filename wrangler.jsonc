@@ -8,5 +8,13 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*"]
   },
+  "durable_objects": {
+    "bindings": [
+      { "name": "WORKSPACE", "class_name": "Workspace" },
+      { "name": "SANDBOX", "class_name": "SandboxWorkspace" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Workspace", "SandboxWorkspace"] }],
+  "vars": { "OPENROUTER_MODEL": "anthropic/claude-sonnet-5.5" },
   "observability": { "enabled": true }
 }
