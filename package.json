@@ -14,6 +14,7 @@
     "agent": "tsx scripts/agent-cli.ts"
   },
   "dependencies": {
+    "@ag-grid-community/locale": "^36.2.0",
     "ag-grid-community": "^36.2.0",
     "ag-grid-enterprise": "^36.2.0",
     "ag-grid-react": "^36.2.0",

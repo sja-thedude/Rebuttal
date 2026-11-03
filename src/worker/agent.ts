@@ -121,7 +121,7 @@ class Run {
 }
 
 function toolTitle(name: string, args: Record<string, unknown>) {
-  const a = Object.values(args).filter((v) => typeof v === "string").map((v) => String(v).slice(0, 40));
+  const a = Object.values(args).filter((v): v is string => typeof v === "string" && !/\s/.test(v)).map((v) => v.slice(0, 40));
   return `${name}(${a.join(", ")})`;
 }
 
