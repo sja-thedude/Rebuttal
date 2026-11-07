@@ -516,9 +516,16 @@ export default function Console() {
             <IllusError />
             <h3>{t("error.title")}</h3>
             <p>{loadError || t("error.load")}</p>
-            <button className="btn btn-primary" onClick={load}>
-              {t("error.retry")}
-            </button>
+            <div className="state-actions">
+              <button className={`btn${mode === "sandbox" ? "" : " btn-primary"}`} onClick={load}>
+                {t("error.retry")}
+              </button>
+              {mode === "sandbox" && (
+                <button className="btn btn-primary" onClick={() => setMode("demo")}>
+                  {t("error.toDemo")}
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           <>

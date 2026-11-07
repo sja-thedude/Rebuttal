@@ -336,3 +336,4 @@ kbd { font: 500 11px/1 var(--font-mono); padding: 3px 6px; border-radius: 5px; b
 .palette-foot kbd { margin-inline-end: 3px; }
 @media (max-width: 520px) { .palette-hint .mono { display: none; } }
 .pill-sm { font-size: 11px; padding: 2px 8px; gap: 5px; }
+.state-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
