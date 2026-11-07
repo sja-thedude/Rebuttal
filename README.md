@@ -40,14 +40,16 @@ Every step is logged with its reasoning, arguments, output and timing, and shown
 
 ### The dispute queue (AG Grid)
 
-- **Integrated cross-filter charts** (AG Charts through `IntegratedChartsModule`): amount at stake by reason and by verdict. Clicking a bar or slice filters the grid; clicking again clears it. The chart engine loads as its own chunk, in parallel with the workspace data.
+Built entirely on **AG Grid Community** and **AG Charts Community**, both MIT licensed: no licence key and no watermark. Features that usually need Enterprise are built from Community building blocks:
+
+- **Cross-filter charts** (AG Charts): amount at stake by reason (bars) and by verdict (donut). Clicking a bar or slice writes the grid's column filter; filtering a column from its header highlights the charts in turn, and each chart is drawn from the rows the other one leaves in. The chart engine is a separate chunk that loads after the queue.
+- **Expandable case files** as full-width rows: each opens the full case file (evidence, editable response, PayPal request, agent log, order record) right under its dispute, sizes itself to its content, and stays attached through sorting, filtering and quick search.
+- **Grouping by reason or verdict** with cell spanning: one merged cell per group, showing its count and total.
+- **Checkbox filters** for reason, verdict, status and stage, written as AG Grid filter handlers so a chart click filters the grid even before the panel is opened. Number, text and date filters, quick search and status tabs alongside.
 - Column groups (Dispute, Money, Deadline, Agent assessment, Review)
 - Custom cell renderers: deadline urgency with a countdown bar, verdict pills, score bar with evidence dots, status pills, a reason glyph, and a seeded/sandbox origin tag
-- Master/detail rows that open the full case file: evidence, editable response, agent log, order record
-- Set, number, text and date filters; quick search; status filter tabs
-- Row grouping by reason or verdict, with counts and totals
 - Multi-row selection with bulk approve and bulk concede
-- CSV export, a status bar with row counts and aggregation, and AG Grid's own locale packs for Arabic, French and Spanish
+- CSV export, a live footer with the shown count and total, and AG Grid's own locale packs for Arabic, French and Spanish
 - A command palette (<kbd>⌘K</kbd> / <kbd>Ctrl K</kbd>) to jump to any dispute by ID, buyer or reason, and to run actions; <kbd>/</kbd> focuses the quick search
 - One theme built from the app's design tokens, so the grid re-tints with light and dark mode and mirrors for right-to-left
 
@@ -57,7 +59,9 @@ Each visitor gets their own workspace of 40 seeded disputes for a fictional shop
 
 ### PayPal sandbox workspace
 
-When sandbox credentials are configured, a **PayPal sandbox** workspace appears next to the demo. It syncs real disputes from the sandbox Disputes API, looks up the underlying transactions in the Transaction Search API, and files approved responses with `provide-evidence` (or `accept-claim` for a concession). The client is hard-wired to `api-m.sandbox.paypal.com`, so live credentials can't be used.
+When sandbox credentials are configured, a **PayPal sandbox** workspace appears next to the demo. It syncs real disputes from the sandbox Disputes API, looks up the underlying transactions in the Transaction Search API (falling back to the Payments, Orders and Tracking APIs when Transaction Search isn't enabled or hasn't indexed a new payment yet), and files approved responses with `provide-evidence` (or `accept-claim` for a concession). The client is hard-wired to `api-m.sandbox.paypal.com`, so live credentials can't be used.
+
+To create a test dispute: run `npm run sandbox:order`, approve the order with your sandbox personal (buyer) account, then open the payment at sandbox.paypal.com as that buyer and choose **Report a problem**. Click **Sync from PayPal** in the console.
 
 ## Guardrails
 
@@ -84,6 +88,7 @@ Other scripts:
 npm run agent               # run the agent over all seeded disputes in the terminal
 npm run agent -- PP-D-100081  # full reasoning log and draft for one dispute
 npm run gate                # one real call to the PayPal sandbox Disputes API
+npm run sandbox:order       # create a real sandbox order to open a test dispute on
 npm run build               # typecheck and build
 npm run deploy              # build and deploy to Cloudflare Workers
 ```
@@ -100,12 +105,11 @@ Names only; see `.env.example`. Set production values with `wrangler secret put 
 | `PAYPAL_CLIENT_SECRET` | PayPal **sandbox** REST app secret |
 | `OPENROUTER_API_KEY` | Model access through OpenRouter |
 | `OPENROUTER_MODEL` | OpenRouter model ID, or a comma-separated list tried in order (set in `wrangler.jsonc` vars) |
-| `VITE_AG_GRID_LICENSE_KEY` | Optional, build time: removes the AG Grid Enterprise evaluation watermark |
 
 ## Stack
 
 - **Frontend:** React 19 and Vite, with hand-written CSS design tokens. Fraunces, IBM Plex Sans, IBM Plex Sans Arabic and IBM Plex Mono.
-- **Data grid:** AG Grid 36 (Community and Enterprise modules: master/detail, row grouping, set filter, status bar, menus, integrated charts) with AG Charts 14.
+- **Data grid:** AG Grid Community 36 and AG Charts Community 14, both MIT licensed. No licence key needed.
 - **Backend:** Cloudflare Workers, with a Durable Object per demo workspace (SQLite-backed storage) and one shared sandbox workspace. Agent runs stream to the browser over server-sent events.
 - **Languages and themes:** English, Arabic (right to left), French and Spanish. Light and dark themes that follow the system setting, with a toggle.
 
@@ -115,9 +119,10 @@ Names only; see `.env.example`. Set production values with `wrangler secret put 
 | --- | --- |
 | **PayPal Disputes API** (sandbox) | List disputes, show dispute details, `provide-evidence`, `accept-claim` |
 | **PayPal Transaction Search API** (sandbox) | Find the disputed transaction and the buyer's other transactions |
+| **PayPal Orders, Payments and Tracking APIs** (sandbox) | Create test orders, capture them, attach tracking, and read order details when Transaction Search has nothing yet |
 | **PayPal OAuth 2.0** (sandbox) | Client-credentials token for the calls above |
 | **OpenRouter**, model `nvidia/nemotron-3.5-lightning:free`, falling back to `openai/gpt-oss-120b` | Drives the agent loop: plans, chooses tool calls, reasons over results, writes the response notes. The free model goes first; OpenRouter routes to the low-cost fallback only when the free pool is busy. Each case file records which model answered. Set by `OPENROUTER_MODEL`. |
-| **AG Grid** and **AG Charts** | The dispute queue and its integrated cross-filter charts |
+| **AG Grid Community** and **AG Charts Community** | The dispute queue and its cross-filter charts (MIT, no licence key) |
 | **Cloudflare Workers and Durable Objects** | Hosting, API and per-workspace state |
 | **Playwright** | Product screenshots and the Open Graph image (development only) |
 

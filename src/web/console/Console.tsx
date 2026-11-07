@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgGridReact } from "ag-grid-react";
-import { ColumnMenuModule, ContextMenuModule, LicenseManager, MasterDetailModule, RowGroupingModule, SetFilterModule, StatusBarModule } from "ag-grid-enterprise";
 import {
+  CellSpanModule,
   CellStyleModule,
+  ClientSideRowModelApiModule,
+  CustomFilterModule,
+  EventApiModule,
   ClientSideRowModelModule,
   CsvExportModule,
   DateFilterModule,
@@ -19,7 +22,7 @@ import {
   ScrollApiModule,
   TextFilterModule,
   ValidationModule,
-  themeQuartz, type ColDef, type ColGroupDef, type GetRowIdParams, type GridApi, type IRowNode } from "ag-grid-community";
+  themeQuartz, type ColDef, type ColGroupDef, type GetRowIdParams, type GridApi, type IRowNode, type RowHeightParams } from "ag-grid-community";
 import { AG_GRID_LOCALE_EG, AG_GRID_LOCALE_ES, AG_GRID_LOCALE_FR } from "@ag-grid-community/locale";
 import type { CaseFile, CaseStatus, QueueRow, WorkspaceInfo } from "../../shared/types";
 import { api, type Mode } from "../api";
@@ -29,9 +32,10 @@ import { useToast } from "../components/Toasts";
 import { TopBar } from "../components/TopBar";
 import { IllusEmptyQueue, IllusError } from "../components/Illustrations";
 import { IconChart, IconCheck, IconClock, IconDownload, IconPlay, IconRefresh, IconSearch, IconX } from "../components/Icons";
-import { BuyerCell, DueCell, EngineCell, EvidenceCell, GroupInner, IdCell, ReasonCell, ScoreCell, StatusCell, VerdictCell, dueInfo } from "./cells";
-import { CaseDetailRow } from "./CaseDetail";
-import { CHART_THEMES } from "./chart-theme";
+import { BuyerCell, DueCell, EngineCell, EvidenceCell, GroupSpanCell, IdCell, ReasonCell, ScoreCell, StatusCell, VerdictCell, dueInfo, type GridRow } from "./cells";
+import { DetailFullRow, detailHeight } from "./CaseDetail";
+import { ChoiceFilter, choiceFilterPass } from "./ChoiceFilter";
+import { REASON_CODES } from "../../shared/playbook";
 import { Insights } from "./Insights";
 import { Palette } from "./Palette";
 import { ConsoleCtx, type ConsoleApi } from "./context";
@@ -40,6 +44,8 @@ import "./console.css";
 
 ModuleRegistry.registerModules([
   ClientSideRowModelModule,
+  ClientSideRowModelApiModule,
+  EventApiModule,
   TextFilterModule,
   NumberFilterModule,
   DateFilterModule,
@@ -54,23 +60,10 @@ ModuleRegistry.registerModules([
   HighlightChangesModule,
   LocaleModule,
   RowAutoHeightModule,
-  MasterDetailModule,
-  RowGroupingModule,
-  SetFilterModule,
-  ColumnMenuModule,
-  ContextMenuModule,
-  StatusBarModule,
+  CustomFilterModule,
+  CellSpanModule,
   ...(import.meta.env.DEV ? [ValidationModule] : []),
 ]);
-// The chart engine is a separate chunk, fetched in parallel with the workspace.
-const chartsLoaded = import("./charts").then(
-  (m) => {
-    ModuleRegistry.registerModules([m.ChartsModule]);
-    return true;
-  },
-  () => false
-);
-
 const readInsights = () => {
   try {
     return localStorage.getItem("rb-insights") !== "0";
@@ -79,8 +72,6 @@ const readInsights = () => {
   }
 };
 
-const LICENSE = import.meta.env.VITE_AG_GRID_LICENSE_KEY as string | undefined;
-if (LICENSE) LicenseManager.setLicenseKey(LICENSE);
 
 // Every colour is a theme token, so the grid re-tints with the page in light and dark mode.
 const gridTheme = themeQuartz.withParams({
@@ -208,9 +199,18 @@ export default function Console() {
     setLiveKey((k) => k + 1);
     setLive(target);
   };
-  const gridApi = useRef<GridApi<QueueRow> | null>(null);
-  const [grid, setGrid] = useState<GridApi<QueueRow> | null>(null);
-  const [charts, setCharts] = useState<boolean | null>(null);
+  const gridApi = useRef<GridApi<GridRow> | null>(null);
+  const [grid, setGrid] = useState<GridApi<GridRow> | null>(null);
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleRow = useCallback((id: string, open?: boolean) => {
+    setExpanded((cur) => {
+      const next = new Set(cur);
+      if (open ?? !next.has(id)) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+  const [foot, setFoot] = useState({ shown: 0, sum: 0 });
   const [showInsights, setShowInsights] = useState(readInsights);
   const toggleInsights = () =>
     setShowInsights((v) => {
@@ -221,10 +221,6 @@ export default function Console() {
       }
       return !v;
     });
-
-  useEffect(() => {
-    chartsLoaded.then(setCharts);
-  }, []);
 
   const [palette, setPalette] = useState(false);
   useEffect(() => {
@@ -301,16 +297,48 @@ export default function Console() {
         setLiveKey((k) => k + 1);
         setLive({ kind: "rerun", id });
       },
+      expanded,
+      toggleRow,
     }),
-    [mode, ws?.model]
+    [mode, ws?.model, expanded, toggleRow]
   );
 
-  const columnDefs = useMemo<(ColDef<QueueRow> | ColGroupDef<QueueRow>)[]>(
+  // Community master/detail: an open case is a full-width row placed right after its dispute.
+  // It copies the dispute's fields, so every sort, filter and quick search treats the pair alike.
+  const rowData = useMemo<GridRow[]>(
+    () => rows.flatMap((r) => (expanded.has(r.id) && r.status !== "processing" ? [r, { ...r, id: `${r.id}::detail`, detailOf: r.id }] : [r])),
+    [rows, expanded]
+  );
+
+  const choice = useCallback(<T extends string>(values: readonly T[], format: (v: T) => string) => ({ filter: { component: ChoiceFilter, doesFilterPass: choiceFilterPass }, filterParams: { values, format } }), []);
+  const VERDICT_RANK: Record<string, number> = { strong: 0, weak: 1, concede: 2 };
+
+  const columnDefs = useMemo<(ColDef<GridRow> | ColGroupDef<GridRow>)[]>(
     () => [
+      ...(group !== "none"
+        ? [
+            {
+              colId: "group",
+              headerName: group === "reason" ? t("col.reason") : t("col.verdict"),
+              valueGetter: (p: { data?: GridRow }) => (p.data ? (group === "reason" ? p.data.reason : p.data.verdict ?? "") : ""),
+              cellRenderer: GroupSpanCell,
+              cellRendererParams: { field: group },
+              spanRows: true,
+              sort: "asc" as const,
+              sortIndex: 0,
+              comparator: group === "verdict" ? (a: string, b: string) => (VERDICT_RANK[a] ?? 9) - (VERDICT_RANK[b] ?? 9) : undefined,
+              pinned: narrow ? undefined : dir === "rtl" ? ("right" as const) : ("left" as const),
+              minWidth: 210,
+              maxWidth: 260,
+              cellClass: "group-span-cell",
+              suppressMovable: true,
+            } satisfies ColDef<GridRow>,
+          ]
+        : []),
       {
         headerName: t("col.dispute"),
         children: [
-          { field: "id", headerName: t("col.id"), cellRenderer: "agGroupCellRenderer", cellRendererParams: { innerRenderer: IdCell }, minWidth: 190, flex: narrow ? 1 : undefined, filter: "agTextColumnFilter" },
+          { field: "id", headerName: t("col.id"), cellRenderer: IdCell, minWidth: 196, flex: narrow ? 1 : undefined, filter: "agTextColumnFilter" },
           { field: "buyerName", headerName: t("col.buyer"), cellRenderer: BuyerCell, minWidth: 170, flex: 1.2, hide: narrow, getQuickFilterText: (p) => `${p.data?.buyerName} ${p.data?.buyerEmail}`, filter: "agTextColumnFilter" },
           {
             field: "reason",
@@ -318,26 +346,23 @@ export default function Console() {
             cellRenderer: ReasonCell,
             minWidth: 170,
             flex: 1,
-            rowGroup: group === "reason",
             hide: group === "reason" || narrow,
-            filter: "agSetColumnFilter",
-            filterParams: { valueFormatter: (p: { value: QueueRow["reason"] }) => reason(p.value) },
+            ...choice(REASON_CODES, reason),
             getQuickFilterText: (p) => reason(p.value),
             valueFormatter: (p) => (p.value ? reason(p.value) : ""),
           },
-          { colId: "reasonLabel", headerName: t("col.reason"), hide: true, chartDataType: "category", valueGetter: (p) => (p.data ? reason(p.data.reason) : ""), filter: "agSetColumnFilter", suppressColumnsToolPanel: true },
-          { field: "stage", headerName: t("col.stage"), minWidth: 120, hide: true, valueFormatter: (p) => (p.value ? t(`stage.${p.value}` as never) : ""), filter: "agSetColumnFilter" },
+          { field: "stage", headerName: t("col.stage"), minWidth: 120, hide: true, valueFormatter: (p) => (p.value ? t(`stage.${p.value}` as never) : ""), ...choice(["INQUIRY", "CHARGEBACK", "PRE_ARBITRATION", "ARBITRATION"] as const, (v) => t(`stage.${v}` as never)) },
         ],
       },
       {
         headerName: t("col.money"),
         children: [
-          { field: "amount", headerName: t("col.amount"), type: "rightAligned", minWidth: 124, cellClass: "mono tnum", valueFormatter: (p) => (p.data ? money(p.value, p.data.currency) : ""), filter: "agNumberColumnFilter", aggFunc: "sum", chartDataType: "series" },
+          { field: "amount", headerName: t("col.amount"), type: "rightAligned", minWidth: 124, cellClass: "mono tnum", valueFormatter: (p) => (p.data ? money(p.value, p.data.currency) : ""), filter: "agNumberColumnFilter" },
         ],
       },
       {
         headerName: t("col.deadline"),
-        children: [{ field: "responseDueAt", headerName: t("col.due"), cellRenderer: DueCell, minWidth: 140, sort: "asc", filter: "agDateColumnFilter", filterParams: { comparator: (f: Date, v: string) => Date.parse(v) - f.getTime() } }],
+        children: [{ field: "responseDueAt", headerName: t("col.due"), cellRenderer: DueCell, minWidth: 140, sort: "asc", sortIndex: 1, filter: "agDateColumnFilter", filterParams: { comparator: (f: Date, v: string) => Date.parse(v) - f.getTime() } }],
       },
       {
         headerName: t("col.assessment"),
@@ -347,14 +372,11 @@ export default function Console() {
             headerName: t("col.verdict"),
             cellRenderer: VerdictCell,
             minWidth: 140,
-            rowGroup: group === "verdict",
             hide: group === "verdict",
-            filter: "agSetColumnFilter",
-            filterParams: { valueFormatter: (p: { value: QueueRow["verdict"] }) => (p.value ? verdict(p.value) : "") },
+            ...choice(["strong", "weak", "concede"] as const, verdict),
             getQuickFilterText: (p) => (p.value ? verdict(p.value) : ""),
             valueFormatter: (p) => (p.value ? verdict(p.value) : ""),
           },
-          { colId: "verdictLabel", headerName: t("col.verdict"), hide: true, chartDataType: "category", valueGetter: (p) => (p.data?.verdict ? verdict(p.data.verdict) : ""), filter: "agSetColumnFilter", suppressColumnsToolPanel: true },
           { field: "score", headerName: t("col.score"), cellRenderer: ScoreCell, minWidth: 150, hide: narrow, filter: "agNumberColumnFilter" },
           { colId: "evidence", headerName: t("col.evidence"), valueGetter: (p) => (p.data ? p.data.found / Math.max(1, p.data.needed) : null), cellRenderer: EvidenceCell, minWidth: 140, hide: true, valueFormatter: (p) => (p.data ? `${p.data.found}/${p.data.needed}` : "") },
         ],
@@ -362,12 +384,12 @@ export default function Console() {
       {
         headerName: t("col.review"),
         children: [
-          { field: "status", headerName: t("col.status"), cellRenderer: StatusCell, minWidth: 136, hide: narrow, filter: "agSetColumnFilter", filterParams: { valueFormatter: (p: { value: CaseStatus }) => status(p.value) }, valueFormatter: (p) => (p.value ? status(p.value) : ""), getQuickFilterText: (p) => status(p.value) },
+          { field: "status", headerName: t("col.status"), cellRenderer: StatusCell, minWidth: 136, hide: narrow, ...choice(["needs_review", "approved", "conceded", "filed", "processing"] as const, status), valueFormatter: (p) => (p.value ? status(p.value) : ""), getQuickFilterText: (p) => status(p.value) },
           { field: "engine", headerName: t("col.engine"), cellRenderer: EngineCell, minWidth: 140, hide: true },
         ],
       },
     ],
-    [t, reason, verdict, status, money, group, narrow, dir]
+    [t, reason, verdict, status, money, group, narrow, dir, choice]
   );
 
   const defaultColDef = useMemo<ColDef>(() => ({ flex: 1, minWidth: 110, sortable: true, resizable: true, suppressHeaderMenuButton: false, enableCellChangeFlash: false }), []);
@@ -392,6 +414,7 @@ export default function Console() {
 
   const exportCsv = () =>
     gridApi.current?.exportDataAsCsv({
+      shouldRowBeSkipped: (p) => !!p.node.data?.detailOf,
       fileName: `rebuttal-disputes-${new Date().toISOString().slice(0, 10)}.csv`,
       columnKeys: ["id", "buyerName", "reason", "stage", "amount", "responseDueAt", "verdict", "score", "evidence", "status"],
       processCellCallback: (p) => {
@@ -453,11 +476,11 @@ export default function Console() {
     setFilter("all");
     setQuick("");
     gridApi.current?.setFilterModel(null);
+    toggleRow(id, true);
     requestAnimationFrame(() => {
       const node = gridApi.current?.getRowNode(id);
       if (!node) return;
-      gridApi.current?.ensureNodeVisible(node, "middle");
-      node.setExpanded(true);
+      gridApi.current?.ensureNodeVisible(node, "top");
       flash(id);
     });
   };
@@ -549,7 +572,7 @@ export default function Console() {
             </section>
 
             <div id="insights" className={`insights-wrap${showInsights && ws ? " open" : ""}`} aria-hidden={!showInsights}>
-              <div>{ws && showInsights && <Insights api={grid} rows={rows} charts={charts === true} />}</div>
+              <div>{ws && showInsights && <Insights api={grid} rows={rows} />}</div>
             </div>
 
             <section className="queue card rise" style={{ ["--i" as string]: 2 }} aria-label="Dispute queue">
@@ -602,35 +625,51 @@ export default function Console() {
               </div>
 
               <div className="grid-wrap">
-                {!ws || charts === null ? (
+                {!ws ? (
                   <GridSkeleton />
                 ) : (
-                  <AgGridReact<QueueRow>
+                  <AgGridReact<GridRow>
                     key={`${lang}-${group}`}
                     theme={gridTheme}
-                    rowData={rows}
+                    rowData={rowData}
                     columnDefs={columnDefs}
                     defaultColDef={defaultColDef}
-                    getRowId={(p: GetRowIdParams<QueueRow>) => p.data.id}
+                    getRowId={(p: GetRowIdParams<GridRow>) => p.data.id}
                     context={{ model: ws.model }}
                     enableRtl={dir === "rtl"}
                     localeText={localeText}
                     quickFilterText={quick}
                     isExternalFilterPresent={() => filter !== "all"}
-                    doesExternalFilterPass={(n: IRowNode<QueueRow>) => (filter === "all" ? true : n.data?.status === filter)}
-                    masterDetail
-                    isRowMaster={(d) => d.status !== "processing"}
-                    detailCellRenderer={CaseDetailRow}
-                    detailRowAutoHeight
-                    keepDetailRows
-                    keepDetailRowsCount={12}
-                    groupDisplayType="groupRows"
-                    groupRowRendererParams={{ innerRenderer: GroupInner, suppressCount: true }}
-                    groupDefaultExpanded={1}
-                    masterDefaultExpanded={0}
-                    rowSelection={{ mode: "multiRow", checkboxes: true, headerCheckbox: true, enableClickSelection: false, isRowSelectable: (n) => n.data?.status === "needs_review" }}
+                    doesExternalFilterPass={(n: IRowNode<GridRow>) => (filter === "all" ? true : n.data?.status === filter)}
+                    isFullWidthRow={(p) => !!p.rowNode.data?.detailOf}
+                    fullWidthCellRenderer={DetailFullRow}
+                    getRowHeight={(p: RowHeightParams<GridRow>) => (p.data?.detailOf ? detailHeight(p.data.detailOf) : undefined)}
+                    postSortRows={({ nodes }) => {
+                      const details = new Map<string, IRowNode<GridRow>>();
+                      const masters = nodes.filter((n) => (n.data?.detailOf ? (details.set(n.data.detailOf, n), false) : true));
+                      nodes.length = 0;
+                      for (const n of masters) {
+                        nodes.push(n);
+                        const d = details.get(n.data!.id);
+                        if (d) nodes.push(d);
+                      }
+                    }}
+                    enableCellSpan={group !== "none"}
+                    enableFilterHandlers
+                    rowSelection={{ mode: "multiRow", checkboxes: (p) => !p.data?.detailOf, headerCheckbox: true, enableClickSelection: false, isRowSelectable: (n) => n.data?.status === "needs_review" && !n.data.detailOf }}
                     selectionColumnDef={{ pinned: narrow ? undefined : dir === "rtl" ? "right" : "left", width: 52, minWidth: 52, maxWidth: 52 }}
                     onSelectionChanged={(e) => setSelected(e.api.getSelectedRows().map((r) => r.id))}
+                    onModelUpdated={(e) => {
+                      let shown = 0;
+                      let sum = 0;
+                      e.api.forEachNodeAfterFilter((n) => {
+                        if (n.data && !n.data.detailOf) {
+                          shown++;
+                          sum += n.data.amount;
+                        }
+                      });
+                      setFoot((f) => (f.shown === shown && f.sum === sum ? f : { shown, sum }));
+                    }}
                     onGridReady={(e) => {
                       gridApi.current = e.api;
                       setGrid(e.api);
@@ -639,24 +678,23 @@ export default function Console() {
                       gridApi.current = null;
                       setGrid(null);
                     }}
-                    enableCharts={charts === true}
-                    customChartThemes={CHART_THEMES}
-                    chartThemes={["rb-light", "rb-dark"]}
                     animateRows
                     noRowsOverlayComponent={NoRows}
-                    statusBar={{
-                      statusPanels: [
-                        { statusPanel: "agTotalAndFilteredRowCountComponent", align: "left" },
-                        { statusPanel: "agSelectedRowCountComponent", align: "left" },
-                        { statusPanel: "agAggregationComponent", align: "right" },
-                      ],
-                    }}
-                    cellSelection={false}
                     suppressCellFocus={false}
                     tooltipShowDelay={300}
                   />
                 )}
               </div>
+              {ws && (
+                <div className="grid-foot small" aria-live="polite">
+                  <span>{t("foot.shown", { n: foot.shown, total: rows.length })}</span>
+                  {selected.length > 0 && <span>{t("toolbar.selected", { n: selected.length })}</span>}
+                  <span className="spacer" />
+                  <span>
+                    {t("foot.sum")} <strong className="mono tnum">{money(foot.sum)}</strong>
+                  </span>
+                </div>
+              )}
             </section>
             <p className="legal small">
               <IconClock /> {t("ws.notLegal")}

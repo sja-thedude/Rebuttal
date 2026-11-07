@@ -7,6 +7,8 @@ export interface ConsoleApi {
   model: string | null;
   onCaseChanged: (id: string, c: CaseFile) => void;
   rerun: (id: string) => void;
+  expanded: ReadonlySet<string>;
+  toggleRow: (id: string, open?: boolean) => void;
 }
 
 export const ConsoleCtx = createContext<ConsoleApi | null>(null);

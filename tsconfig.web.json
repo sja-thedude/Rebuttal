@@ -13,5 +13,6 @@
     "types": ["vite/client"],
     "tsBuildInfoFile": "node_modules/.tmp/web.tsbuildinfo"
   },
-  "include": ["src/web", "src/shared"]
+  "include": ["src/web", "src/shared"],
+  "exclude": ["**/* 2.*"]
 }

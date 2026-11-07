@@ -20,7 +20,38 @@ const TABS: { id: Tab; key: Key }[] = [
   { id: "record", key: "detail.tabRecord" },
 ];
 
-export function CaseDetailRow(p: CustomCellRendererProps<QueueRow>) {
+// Measured heights survive the row being scrolled out and back in.
+const HEIGHTS = new Map<string, number>();
+export const detailHeight = (id: string) => HEIGHTS.get(id) ?? 560;
+
+/** Full-width grid row holding a dispute's case file; it sizes itself to its content. */
+export function DetailFullRow(p: CustomCellRendererProps<QueueRow & { detailOf?: string }>) {
+  const ref = useRef<HTMLDivElement>(null);
+  const id = p.data?.detailOf;
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !id) return;
+    const ro = new ResizeObserver(() => {
+      const h = Math.ceil(el.getBoundingClientRect().height);
+      if (!h || HEIGHTS.get(id) === h) return;
+      HEIGHTS.set(id, h);
+      if (!p.api.isDestroyed()) {
+        p.node.setRowHeight(h);
+        p.api.onRowHeightChanged();
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [id, p.api, p.node]);
+  if (!p.data || !id) return null;
+  return (
+    <div ref={ref} className="detail-full">
+      <CaseDetailRow data={{ ...p.data, id }} />
+    </div>
+  );
+}
+
+export function CaseDetailRow(p: { data?: QueueRow }) {
   const row = p.data!;
   const { mode } = useConsole();
   const { t } = useI18n();

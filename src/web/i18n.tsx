@@ -186,6 +186,12 @@ const en = {
   "palette.navigate": "navigate",
   "palette.select": "open",
   "error.toDemo": "Open the demo workspace",
+  "foot.shown": "{n} of {total} disputes",
+  "foot.sum": "Total shown",
+  "row.expand": "Open case file",
+  "row.collapse": "Close case file",
+  "insights.clear": "Clear chart filter",
+  "insights.open": "open",
 };
 
 type Dict = Record<keyof typeof en, string>;
@@ -357,6 +363,12 @@ const ar: Dict = {
   "palette.navigate": "تنقّل",
   "palette.select": "فتح",
   "error.toDemo": "افتح مساحة العرض",
+  "foot.shown": "{n} من {total} نزاعًا",
+  "foot.sum": "إجمالي المعروض",
+  "row.expand": "فتح ملف القضية",
+  "row.collapse": "إغلاق ملف القضية",
+  "insights.clear": "مسح تصفية الرسم",
+  "insights.open": "مفتوحة",
 };
 
 const fr: Dict = {
@@ -526,6 +538,12 @@ const fr: Dict = {
   "palette.navigate": "naviguer",
   "palette.select": "ouvrir",
   "error.toDemo": "Ouvrir l’espace de démonstration",
+  "foot.shown": "{n} litiges sur {total}",
+  "foot.sum": "Total affiché",
+  "row.expand": "Ouvrir le dossier",
+  "row.collapse": "Fermer le dossier",
+  "insights.clear": "Effacer le filtre du graphique",
+  "insights.open": "ouverts",
 };
 
 const es: Dict = {
@@ -695,6 +713,12 @@ const es: Dict = {
   "palette.navigate": "navegar",
   "palette.select": "abrir",
   "error.toDemo": "Abrir el espacio de demostración",
+  "foot.shown": "{n} de {total} disputas",
+  "foot.sum": "Total mostrado",
+  "row.expand": "Abrir el expediente",
+  "row.collapse": "Cerrar el expediente",
+  "insights.clear": "Quitar filtro del gráfico",
+  "insights.open": "abiertas",
 };
 
 const DICTS: Record<Lang, Dict> = { en, ar, fr, es };
