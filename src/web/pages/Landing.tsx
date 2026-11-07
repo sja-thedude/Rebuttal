@@ -5,12 +5,13 @@ import { LogoMark } from "../components/Logo";
 import { HeroBackdrop, SpotFind, SpotProof, SpotStep, SpotWrite } from "../components/Spots";
 import { IconArrow, IconCheck, IconShield } from "../components/Icons";
 import { ReasonGlyph } from "../console/cells";
-import { useCountUp, useReveal } from "../hooks";
+import { useCountUp, usePointerFx, useReveal } from "../hooks";
 import { useI18n } from "../i18n";
 import { useTheme } from "../theme";
 import { Link } from "../router";
 import { COPY } from "./copy";
 import { HeroReplay } from "./HeroReplay";
+import { Pipeline, StampScene } from "./Pipeline";
 import "./landing.css";
 
 const REPO = "https://github.com/sja-thedude/Rebuttal";
@@ -33,6 +34,8 @@ export default function Landing() {
   const { resolved } = useTheme();
   const c = COPY[lang];
   const ref = useReveal<HTMLDivElement>();
+  usePointerFx(ref);
+  const chips = REASON_CODES.flatMap((code) => PLAYBOOK[code].physical.map((r) => r.label)).filter((v, i, a) => a.indexOf(v) === i);
 
   useEffect(() => {
     document.title = "Rebuttal — dispute defence for PayPal merchants";
@@ -40,6 +43,7 @@ export default function Landing() {
 
   return (
     <div ref={ref}>
+      <div className="scroll-progress" aria-hidden="true" />
       <TopBar variant="landing" />
       <main id="main" className="landing view">
         <section className="hero">
@@ -85,6 +89,21 @@ export default function Landing() {
           ))}
         </section>
 
+        <div className="marquee" aria-hidden="true">
+          <div className="marquee-track">
+            {[0, 1].map((k) => (
+              <span key={k} className="marquee-set">
+                {chips.map((x) => (
+                  <span key={x} className="chip">
+                    <IconCheck />
+                    {x}
+                  </span>
+                ))}
+              </span>
+            ))}
+          </div>
+        </div>
+
         <section className="section">
           <div className="section-head reveal">
             <span className="eyebrow">{c.problemEyebrow}</span>
@@ -108,6 +127,7 @@ export default function Landing() {
             <h2>{c.howTitle}</h2>
             <p>{c.howBody}</p>
           </div>
+          <Pipeline stages={c.pipe} />
           <ol className="steps">
             {c.steps.map((s, i) => (
               <li key={s.t} className="step card lift reveal" style={{ ["--i" as string]: i }}>
@@ -203,12 +223,15 @@ export default function Landing() {
         </section>
 
         <section className="cta-band reveal">
-          <h2>{c.ctaTitle}</h2>
-          <p>{c.ctaBody}</p>
-          <Link to="/app" className="btn btn-primary btn-lg">
-            {c.ctaPrimary}
-            <IconArrow className="flip-rtl" />
-          </Link>
+          <div className="cta-copy">
+            <h2>{c.ctaTitle}</h2>
+            <p>{c.ctaBody}</p>
+            <Link to="/app" className="btn btn-primary btn-lg">
+              {c.ctaPrimary}
+              <IconArrow className="flip-rtl" />
+            </Link>
+          </div>
+          <StampScene label={c.stampLabel} />
         </section>
       </main>
 

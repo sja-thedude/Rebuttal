@@ -18,6 +18,7 @@ const target = process.argv[2];
 
 if (target) {
   const c = await runAgent(src, target, { model, emit: (s) => console.log(`\n[${s.i}] ${s.kind.toUpperCase()} ${s.title}${s.ms != null ? ` (${s.ms}ms)` : ""}\n${s.reasoning ? "  why: " + s.reasoning + "\n" : ""}${s.output ? "  → " + s.output : ""}`) });
+  console.log(`\n--- ENGINE ---\n${c.engine.kind === "model" ? c.engine.model : "rules"}`);
   console.log("\n--- DRAFT ---\n" + c.draft.notes);
   console.log("\n--- EVIDENCE (PayPal provide-evidence) ---\n" + JSON.stringify(c.draft.evidences, null, 2));
   console.log("\n--- GAPS ---\n" + (c.draft.gaps.join("\n") || "none"));

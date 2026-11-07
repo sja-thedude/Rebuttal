@@ -66,6 +66,11 @@ const en = {
   footNote: "Rebuttal drafts responses from your records. It is not legal advice. Demo data is seeded and labelled as such.",
   footBuilt: "Built for the PayPal AI Hackathon. Open source under the MIT licence.",
   source: "Source code",
+  pipeEyebrow: "Under the hood",
+  pipeTitle: "One dispute, start to finish.",
+  pipeBody: "Every case runs the same loop. Each stage hands the next one only what it could verify.",
+  pipe: [{"t": "Dispute arrives", "s": "Disputes API"}, {"t": "Pick the playbook", "s": "reason code"}, {"t": "Read the record", "s": "Transaction Search"}, {"t": "Score the evidence", "s": "assess_evidence"}, {"t": "Draft and fact-check", "s": "draft_response"}, {"t": "You approve", "s": "provide-evidence"}],
+  stampLabel: "Approved by the merchant",
 };
 
 type Copy = typeof en;
@@ -129,6 +134,11 @@ const ar: Copy = {
   footNote: "يكتب Rebuttal الردود من سجلاتك. هذا ليس استشارة قانونية. بيانات العرض تجريبية ومُعلَّمة بذلك.",
   footBuilt: "صُنع لهاكاثون PayPal للذكاء الاصطناعي. مفتوح المصدر بترخيص MIT.",
   source: "الشيفرة المصدرية",
+  pipeEyebrow: "خلف الكواليس",
+  pipeTitle: "نزاع واحد من البداية إلى النهاية.",
+  pipeBody: "كل قضية تمر بالحلقة نفسها، وكل مرحلة لا تسلّم التالية إلا ما استطاعت التحقق منه.",
+  pipe: [{"t": "وصول النزاع", "s": "Disputes API"}, {"t": "اختيار الدليل", "s": "reason code"}, {"t": "قراءة السجل", "s": "Transaction Search"}, {"t": "تقييم الأدلة", "s": "assess_evidence"}, {"t": "الصياغة والتحقق", "s": "draft_response"}, {"t": "موافقتك", "s": "provide-evidence"}],
+  stampLabel: "وافق عليه التاجر",
 };
 
 const fr: Copy = {
@@ -190,6 +200,11 @@ const fr: Copy = {
   footNote: "Rebuttal rédige des réponses à partir de vos données. Ce n'est pas un conseil juridique. Les données de démo sont fictives et signalées comme telles.",
   footBuilt: "Créé pour le PayPal AI Hackathon. Open source sous licence MIT.",
   source: "Code source",
+  pipeEyebrow: "Sous le capot",
+  pipeTitle: "Un litige, du début à la fin.",
+  pipeBody: "Chaque cas suit la même boucle. Chaque étape ne transmet à la suivante que ce qu’elle a pu vérifier.",
+  pipe: [{"t": "Le litige arrive", "s": "Disputes API"}, {"t": "Choisir le guide", "s": "reason code"}, {"t": "Lire le dossier", "s": "Transaction Search"}, {"t": "Noter les preuves", "s": "assess_evidence"}, {"t": "Rédiger et vérifier", "s": "draft_response"}, {"t": "Vous approuvez", "s": "provide-evidence"}],
+  stampLabel: "Approuvé par le marchand",
 };
 
 const es: Copy = {
@@ -251,6 +266,11 @@ const es: Copy = {
   footNote: "Rebuttal redacta respuestas a partir de tus registros. No es asesoramiento legal. Los datos de demostración son de ejemplo y están marcados como tales.",
   footBuilt: "Creado para el PayPal AI Hackathon. Código abierto con licencia MIT.",
   source: "Código fuente",
+  pipeEyebrow: "Por dentro",
+  pipeTitle: "Una disputa, de principio a fin.",
+  pipeBody: "Cada caso sigue el mismo ciclo. Cada etapa solo pasa a la siguiente lo que pudo verificar.",
+  pipe: [{"t": "Llega la disputa", "s": "Disputes API"}, {"t": "Elegir la guía", "s": "reason code"}, {"t": "Leer el registro", "s": "Transaction Search"}, {"t": "Puntuar las pruebas", "s": "assess_evidence"}, {"t": "Redactar y verificar", "s": "draft_response"}, {"t": "Tú apruebas", "s": "provide-evidence"}],
+  stampLabel: "Aprobado por el comercio",
 };
 
 export const COPY: Record<Lang, Copy> = { en, ar, fr, es };

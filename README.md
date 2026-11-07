@@ -6,7 +6,7 @@ An agent that defends merchants against PayPal payment disputes. It reads each d
 
 No account is needed to try it: the console opens on a demo workspace of 40 seeded disputes.
 
-![The Rebuttal dispute queue](public/shots/queue-light.jpg)
+![The Rebuttal console: recovery forecast, cross-filter charts and the dispute queue](public/shots/insights-light.jpg)
 
 ## The problem
 
@@ -17,10 +17,11 @@ A small merchant gets a dispute notification with a deadline, often only days aw
 1. **Watches the queue.** Lists open disputes and orders them by response deadline.
 2. **Works out what has to be proven.** Every reason code has its own evidence playbook. An "item not received" dispute needs tracking, a delivery scan and an address match. An "unauthorised" dispute needs address and security-code checks, device history and earlier undisputed orders.
 3. **Gathers evidence from the record.** Order details, amounts, dates, fulfilment and shipment data, buyer messages, refunds, policy, and the buyer's history with this merchant.
-4. **Drafts the response** in PayPal's `provide-evidence` structure (`evidence_type`, `tracking_info`, `refund_ids`, notes under 2,000 characters), citing only evidence it found.
+4. **Drafts the response** in PayPal's `provide-evidence` structure (`evidence_type`, `tracking_info`, `refund_ids`, notes under 2,000 characters), citing only evidence it found. The case file's **PayPal request** tab shows the exact request body that will be filed, built by the same function the worker sends.
 5. **Fact-checks the draft.** Every amount, date and identifier in the draft must appear in the dispute or transaction record. If one doesn't, the draft is rejected and the agent has to fix it.
 6. **Scores the case**: strong, weak, or concede. When the merchant's own records work against them (the parcel was returned to sender, or the buyer cancelled before the charge), Rebuttal recommends accepting the claim and says why.
 7. **Waits for the merchant.** They review, edit, approve or accept the claim. Bulk actions are available for several disputes at once.
+8. **Shows where the money is.** An expected-recovery forecast weights each contestable case's amount by its evidence score, next to the amount at stake by verdict and the share of required evidence found.
 
 ### The agent loop
 
@@ -39,6 +40,7 @@ Every step is logged with its reasoning, arguments, output and timing, and shown
 
 ### The dispute queue (AG Grid)
 
+- **Integrated cross-filter charts** (AG Charts through `IntegratedChartsModule`): amount at stake by reason and by verdict. Clicking a bar or slice filters the grid; clicking again clears it. The chart engine loads as its own chunk, in parallel with the workspace data.
 - Column groups (Dispute, Money, Deadline, Agent assessment, Review)
 - Custom cell renderers: deadline urgency with a countdown bar, verdict pills, score bar with evidence dots, status pills, a reason glyph, and a seeded/sandbox origin tag
 - Master/detail rows that open the full case file: evidence, editable response, agent log, order record
@@ -46,6 +48,7 @@ Every step is logged with its reasoning, arguments, output and timing, and shown
 - Row grouping by reason or verdict, with counts and totals
 - Multi-row selection with bulk approve and bulk concede
 - CSV export, a status bar with row counts and aggregation, and AG Grid's own locale packs for Arabic, French and Spanish
+- A command palette (<kbd>⌘K</kbd> / <kbd>Ctrl K</kbd>) to jump to any dispute by ID, buyer or reason, and to run actions; <kbd>/</kbd> focuses the quick search
 - One theme built from the app's design tokens, so the grid re-tints with light and dark mode and mirrors for right-to-left
 
 ### Demo workspace
@@ -96,13 +99,13 @@ Names only; see `.env.example`. Set production values with `wrangler secret put 
 | `PAYPAL_CLIENT_ID` | PayPal **sandbox** REST app client ID |
 | `PAYPAL_CLIENT_SECRET` | PayPal **sandbox** REST app secret |
 | `OPENROUTER_API_KEY` | Model access through OpenRouter |
-| `OPENROUTER_MODEL` | OpenRouter model ID (set in `wrangler.jsonc` vars) |
+| `OPENROUTER_MODEL` | OpenRouter model ID, or a comma-separated list tried in order (set in `wrangler.jsonc` vars) |
 | `VITE_AG_GRID_LICENSE_KEY` | Optional, build time: removes the AG Grid Enterprise evaluation watermark |
 
 ## Stack
 
 - **Frontend:** React 19 and Vite, with hand-written CSS design tokens. Fraunces, IBM Plex Sans, IBM Plex Sans Arabic and IBM Plex Mono.
-- **Data grid:** AG Grid 36 (Community and Enterprise modules: master/detail, row grouping, set filter, status bar, menus).
+- **Data grid:** AG Grid 36 (Community and Enterprise modules: master/detail, row grouping, set filter, status bar, menus, integrated charts) with AG Charts 14.
 - **Backend:** Cloudflare Workers, with a Durable Object per demo workspace (SQLite-backed storage) and one shared sandbox workspace. Agent runs stream to the browser over server-sent events.
 - **Languages and themes:** English, Arabic (right to left), French and Spanish. Light and dark themes that follow the system setting, with a toggle.
 
@@ -113,8 +116,8 @@ Names only; see `.env.example`. Set production values with `wrangler secret put 
 | **PayPal Disputes API** (sandbox) | List disputes, show dispute details, `provide-evidence`, `accept-claim` |
 | **PayPal Transaction Search API** (sandbox) | Find the disputed transaction and the buyer's other transactions |
 | **PayPal OAuth 2.0** (sandbox) | Client-credentials token for the calls above |
-| **OpenRouter**, model `anthropic/claude-sonnet-5.5` | Drives the agent loop: plans, chooses tool calls, reasons over results, writes the response notes. The model is set by `OPENROUTER_MODEL`. |
-| **AG Grid** | The dispute queue |
+| **OpenRouter**, model `nvidia/nemotron-3.5-lightning:free`, falling back to `openai/gpt-oss-120b` | Drives the agent loop: plans, chooses tool calls, reasons over results, writes the response notes. The free model goes first; OpenRouter routes to the low-cost fallback only when the free pool is busy. Each case file records which model answered. Set by `OPENROUTER_MODEL`. |
+| **AG Grid** and **AG Charts** | The dispute queue and its integrated cross-filter charts |
 | **Cloudflare Workers and Durable Objects** | Hosting, API and per-workspace state |
 | **Playwright** | Product screenshots and the Open Graph image (development only) |
 
@@ -124,6 +127,7 @@ Names only; see `.env.example`. Set production values with `wrangler secret put 
 | --- | --- |
 | ![Queue, light](public/shots/queue-light.jpg) | ![Case file, light](public/shots/case-light.jpg) |
 | ![Queue, dark](public/shots/queue-dark.jpg) | ![Case file, dark](public/shots/case-dark.jpg) |
+| ![Insights, dark](public/shots/insights-dark.jpg) | ![PayPal request preview](public/shots/request-light.jpg) |
 
 ## Hackathon categories
 

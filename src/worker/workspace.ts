@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import type { CaseDetail, CaseFile, Dispute, QueueRow, StreamEvent, Transaction, WorkspaceInfo } from "../shared/types";
+import { ACCEPT_NOTE } from "../shared/paypal-payload";
 import { runAgent, type DataSource } from "./agent";
 import { PayPalClient } from "./paypal";
 import { freshDispute, MERCHANT, seedWorkspace } from "./seed";
@@ -113,7 +114,7 @@ export class Workspace extends DurableObject<Env> {
     return {
       mode: meta.mode,
       merchant: this.isSandbox ? "PayPal sandbox merchant" : MERCHANT,
-      model: this.model()?.name ?? null,
+      model: this.model()?.name.split(",")[0].trim() ?? null,
       sandboxAvailable: Boolean(this.env.PAYPAL_CLIENT_ID && this.env.PAYPAL_CLIENT_SECRET),
       liveRunsLeft: Math.max(0, LIVE_RUNS_PER_DAY - (meta.runsDay === today() ? meta.runs : 0)),
       rows,
@@ -251,7 +252,7 @@ export class Workspace extends DurableObject<Env> {
       const notes = c.editedNotes ?? c.draft.notes;
       try {
         if (action === "approve") await pp.provideEvidence(id, c.draft.evidences, notes);
-        else await pp.acceptClaim(id, "Merchant accepted the claim.");
+        else await pp.acceptClaim(id, ACCEPT_NOTE);
         c.status = "filed";
         c.filing = { ok: true, message: action === "approve" ? "Evidence sent to the PayPal sandbox." : "Claim accepted in the PayPal sandbox." };
       } catch (e) {

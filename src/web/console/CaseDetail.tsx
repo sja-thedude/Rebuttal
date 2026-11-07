@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { CustomCellRendererProps } from "ag-grid-react";
 import { PLAYBOOK } from "../../shared/playbook";
-import type { AgentStep, CaseDetail as Detail, EvidenceItem, QueueRow } from "../../shared/types";
+import { ACCEPT_NOTE, evidenceInput } from "../../shared/paypal-payload";
+import type { AgentStep, CaseDetail as Detail, DraftEvidence, EvidenceItem, QueueRow, Verdict } from "../../shared/types";
 import { api } from "../api";
 import { useI18n, type Key } from "../i18n";
 import { useCountUp } from "../hooks";
@@ -10,10 +11,11 @@ import { IconAlert, IconBrain, IconCheck, IconFlag, IconRefresh, IconShield, Ico
 import { VERDICT_CLASS } from "./cells";
 import { useConsole } from "./context";
 
-type Tab = "evidence" | "draft" | "log" | "record";
+type Tab = "evidence" | "draft" | "payload" | "log" | "record";
 const TABS: { id: Tab; key: Key }[] = [
   { id: "evidence", key: "detail.tabEvidence" },
   { id: "draft", key: "detail.tabDraft" },
+  { id: "payload", key: "detail.tabPayload" },
   { id: "log", key: "detail.tabLog" },
   { id: "record", key: "detail.tabRecord" },
 ];
@@ -228,6 +230,7 @@ function DetailBody({ detail, row }: { detail: Detail; row: QueueRow }) {
             )}
           </div>
         )}
+        {tab === "payload" && <PayloadView id={d.id} verdict={a.verdict} evidences={c.draft.evidences} notes={notes} />}
         {tab === "log" && <AgentLog steps={c.log} />}
         {tab === "record" && <RecordView detail={detail} />}
       </div>
@@ -398,6 +401,73 @@ function RecordView({ detail }: { detail: Detail }) {
         <h4>{t("detail.policy")}</h4>
         <p className="small">{tx.policy.text || "—"}</p>
       </section>
+    </div>
+  );
+}
+
+const JSON_TOKEN = /("(?:\\.|[^"\\])*")(\s*:)?|\b(true|false|null)\b|(-?\d+(?:\.\d+)?)/g;
+
+function JsonCode({ value }: { value: unknown }) {
+  const text = JSON.stringify(value, null, 2);
+  const out: ReactNode[] = [];
+  let last = 0;
+  for (const m of text.matchAll(JSON_TOKEN)) {
+    out.push(text.slice(last, m.index));
+    const cls = m[1] ? (m[2] ? "j-key" : "j-str") : m[3] ? "j-lit" : "j-num";
+    out.push(<span key={m.index} className={cls}>{m[1] ?? m[0]}</span>);
+    if (m[2]) out.push(m[2]);
+    last = m.index! + m[0].length;
+  }
+  out.push(text.slice(last));
+  return <code>{out}</code>;
+}
+
+function Request({ method, path, contentType, part, body }: { method: string; path: string; contentType: string; part?: string; body: unknown }) {
+  const { t } = useI18n();
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(body, null, 2));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      /* clipboard unavailable */
+    }
+  };
+  return (
+    <figure className="req">
+      <figcaption className="req-head">
+        <span className="req-method mono">{method}</span>
+        <span className="req-path mono">{path}</span>
+        <span className="spacer" />
+        <button className={`btn btn-sm btn-ghost${copied ? " copied" : ""}`} onClick={copy}>
+          {copied ? <IconCheck /> : null}
+          {copied ? t("detail.copied") : t("detail.copy")}
+        </button>
+      </figcaption>
+      <div className="req-meta mono">
+        <span>Host: api-m.sandbox.paypal.com</span>
+        <span>Content-Type: {contentType}</span>
+        {part && <span>Part: {part}</span>}
+      </div>
+      <pre className="req-body" dir="ltr">
+        <JsonCode value={body} />
+      </pre>
+    </figure>
+  );
+}
+
+function PayloadView({ id, verdict, evidences, notes }: { id: string; verdict: Verdict; evidences: DraftEvidence[]; notes: string }) {
+  const { t } = useI18n();
+  const base = `/v1/customer/disputes/${id}`;
+  return (
+    <div className="payload">
+      <p className="muted small">{t("detail.payloadNote")}</p>
+      {verdict !== "concede" && evidences.length > 0 && (
+        <Request method="POST" path={`${base}/provide-evidence`} contentType="multipart/form-data" part='name="input"; application/json' body={evidenceInput(evidences, notes)} />
+      )}
+      {verdict !== "concede" && <p className="muted small">{t("detail.payloadConcede")}</p>}
+      <Request method="POST" path={`${base}/accept-claim`} contentType="application/json" body={{ note: ACCEPT_NOTE }} />
     </div>
   );
 }
