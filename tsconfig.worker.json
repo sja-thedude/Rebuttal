@@ -12,5 +12,6 @@
     "types": ["@cloudflare/workers-types"],
     "tsBuildInfoFile": "node_modules/.tmp/worker.tsbuildinfo"
   },
-  "include": ["src/worker", "src/shared"]
+  "include": ["src/worker", "src/shared"],
+  "exclude": ["**/* 2.*"]
 }

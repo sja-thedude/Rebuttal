@@ -1,5 +1,6 @@
-// Loaded on demand so the chart engine doesn't weigh down the first paint of the queue.
-import { IntegratedChartsModule } from "ag-grid-enterprise";
-import { AgChartsCommunityModule } from "ag-charts-community";
+// Only the chart pieces the insights panel draws, so the lazy chunk stays small.
+import { AgCharts, BarSeriesModule, CategoryAxisModule, DonutSeriesModule, LegendModule, ModuleRegistry, NumberAxisModule } from "ag-charts-community";
 
-export const ChartsModule = IntegratedChartsModule.with(AgChartsCommunityModule);
+ModuleRegistry.registerModules([BarSeriesModule, DonutSeriesModule, CategoryAxisModule, NumberAxisModule, LegendModule]);
+
+export { AgCharts };

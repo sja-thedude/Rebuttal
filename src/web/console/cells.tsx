@@ -2,8 +2,11 @@ import { useEffect, useState } from "react";
 import type { CustomCellRendererProps } from "ag-grid-react";
 import type { QueueRow, ReasonCode, Verdict } from "../../shared/types";
 import { useI18n } from "../i18n";
+import { useConsole } from "./context";
 
-type P = CustomCellRendererProps<QueueRow>;
+/** A queue row, or the full-width case file row that follows an expanded dispute. */
+export type GridRow = QueueRow & { detailOf?: string };
+type P = CustomCellRendererProps<GridRow>;
 
 export const VERDICT_CLASS: Record<Verdict, string> = { strong: "pill-strong", weak: "pill-weak", concede: "pill-concede" };
 
@@ -27,9 +30,22 @@ export function ReasonGlyph({ code }: { code: ReasonCode }) {
 }
 
 export function IdCell({ data }: P) {
+  const { expanded, toggleRow } = useConsole();
+  const { t } = useI18n();
   if (!data) return null;
+  const open = expanded.has(data.id);
+  const can = data.status !== "processing";
   return (
     <span className="cell-id">
+      <button
+        className={`row-toggle${open ? " open" : ""}`}
+        onClick={() => toggleRow(data.id)}
+        disabled={!can}
+        aria-expanded={open}
+        aria-label={`${open ? t("row.collapse") : t("row.expand")} ${data.id}`}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      </button>
       <span className="mono">{data.id}</span>
       {data.origin === "seeded" ? <span className="tag-seeded">seeded</span> : <span className="tag-live">sandbox</span>}
     </span>
@@ -168,20 +184,35 @@ export function EngineCell({ data, context }: P) {
   return <span className="cell-engine">{data.engine === "model" ? t("ws.engineModel", { model: model.split("/").pop() ?? model }) : t("ws.engineRules")}</span>;
 }
 
-export function GroupInner(p: CustomCellRendererProps<QueueRow>) {
-  const { reason, verdict, money } = useI18n();
-  const node = p.node;
-  const leaves = (node.allLeafChildren ?? []).map((n) => n.data).filter(Boolean) as QueueRow[];
-  const total = leaves.reduce((a, r) => a + r.amount, 0);
-  const key = String(node.key ?? "");
-  const label = node.field === "reason" ? reason(key as ReasonCode) : node.field === "verdict" ? verdict(key as Verdict) : key;
+/** The merged cell that heads a run of disputes sharing a reason or verdict when the queue is grouped. */
+export function GroupSpanCell(p: P & { field: "reason" | "verdict" }) {
+  const { reason, verdict, money, t } = useI18n();
+  const key = String(p.value ?? "");
+  let count = 0;
+  let total = 0;
+  p.api.forEachNodeAfterFilter((n) => {
+    const d = n.data;
+    if (d && !d.detailOf && (p.field === "reason" ? d.reason : d.verdict) === key) {
+      count++;
+      total += d.amount;
+    }
+  });
   return (
-    <span className="group-inner">
-      {node.field === "reason" && <ReasonGlyph code={key as ReasonCode} />}
-      {node.field === "verdict" && <span className={`pill ${VERDICT_CLASS[key as Verdict] ?? ""}`}><span className="dot" />{label}</span>}
-      {node.field !== "verdict" && <strong>{label}</strong>}
-      <span className="group-count mono">{leaves.length}</span>
-      <span className="group-total mono">{money(total)}</span>
+    <span className="group-span">
+      {p.field === "reason" ? (
+        <span className="group-span-head">
+          <ReasonGlyph code={key as ReasonCode} />
+          <strong>{reason(key as ReasonCode)}</strong>
+        </span>
+      ) : (
+        <span className={`pill ${VERDICT_CLASS[key as Verdict] ?? ""}`}>
+          <span className="dot" />
+          {key ? verdict(key as Verdict) : t("status.processing")}
+        </span>
+      )}
+      <span className="group-span-meta mono tnum">
+        {count} · {money(total)}
+      </span>
     </span>
   );
 }
