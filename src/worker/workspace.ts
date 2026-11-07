@@ -1,13 +1,16 @@
 import { DurableObject } from "cloudflare:workers";
 import type { CaseDetail, CaseFile, Dispute, QueueRow, StreamEvent, Transaction, WorkspaceInfo } from "../shared/types";
 import { ACCEPT_NOTE } from "../shared/paypal-payload";
+import { offerNote } from "../shared/settle";
 import { runAgent, type DataSource } from "./agent";
+import type { ChatContext } from "./chat";
 import { PayPalClient } from "./paypal";
 import { freshDispute, MERCHANT, seedWorkspace } from "./seed";
 import type { Env } from "./index";
 
 const LIVE_RUNS_PER_DAY = 25;
 const GLOBAL_MODEL_RUNS_PER_DAY = 600;
+const CHATS_PER_DAY = 60;
 
 interface Meta {
   createdAt: number;
@@ -16,6 +19,8 @@ interface Meta {
   runsDay: string;
   runs: number;
   syncedAt?: number;
+  chatDay?: string;
+  chats?: number;
 }
 
 export function toRow(d: Dispute, c: CaseFile | null | undefined): QueueRow {
@@ -145,6 +150,22 @@ export class Workspace extends DurableObject<Env> {
     return true;
   }
 
+  /** Counts one assistant question against today's allowance and returns what the assistant may see. */
+  async chatContext(ids: string[]): Promise<ChatContext | null> {
+    const meta = await this.meta();
+    if (meta.chatDay !== today()) Object.assign(meta, { chatDay: today(), chats: 0 });
+    if ((meta.chats ?? 0) >= CHATS_PER_DAY) return null;
+    meta.chats = (meta.chats ?? 0) + 1;
+    await this.ctx.storage.put("meta", meta);
+    const info = await this.info();
+    const cases: ChatContext["cases"] = [];
+    for (const id of ids.slice(0, 3)) {
+      const dispute = await this.ctx.storage.get<Dispute>(`d:${id}`);
+      if (dispute) cases.push({ dispute, caseFile: (await this.ctx.storage.get<CaseFile>(`c:${id}`)) ?? null });
+    }
+    return { merchant: info.merchant, mode: info.mode, rows: info.rows, cases };
+  }
+
   async takeGlobal(): Promise<boolean> {
     const key = `g:${today()}`;
     const n = ((await this.ctx.storage.get<number>(key)) ?? 0) + 1;
@@ -221,7 +242,10 @@ export class Workspace extends DurableObject<Env> {
       if (!(await this.ctx.storage.get(`d:${d.id}`))) added++;
       await this.ctx.storage.put(`d:${d.id}`, d);
       if (!(await this.ctx.storage.get(`c:${d.id}`))) {
-        const c = await runAgent(this.source(), d.id, {});
+        // Real sandbox disputes are worked by the model; seeded demo data uses the rules engine.
+        let model = this.model();
+        if (model && !(await this.env.WORKSPACE.get(this.env.WORKSPACE.idFromName("__quota__")).takeGlobal())) model = undefined;
+        const c = await runAgent(this.source(), d.id, { model });
         await this.ctx.storage.put(`c:${d.id}`, c);
       }
     }
@@ -239,14 +263,36 @@ export class Workspace extends DurableObject<Env> {
     return c;
   }
 
-  async decide(id: string, action: "approve" | "concede" | "reopen"): Promise<CaseFile> {
+  async decide(id: string, action: "approve" | "concede" | "reopen" | "settle", amount?: number): Promise<CaseFile> {
     const c = await this.ctx.storage.get<CaseFile>(`c:${id}`);
     if (!c) throw new Error("No case file for that dispute yet.");
     if (c.status === "filed") throw new Error("This response was already filed with PayPal.");
     c.decidedAt = new Date().toISOString();
+    if (action === "settle") {
+      const d = await this.ctx.storage.get<Dispute>(`d:${id}`);
+      if (!d) throw new Error("That dispute isn't in this workspace.");
+      const value = Math.round((amount ?? 0) * 100) / 100;
+      if (!(value > 0) || value >= d.amount.value) throw new Error(`The offer must be more than 0 and less than ${d.amount.currency} ${d.amount.value.toFixed(2)}.`);
+      const note = offerNote(value.toFixed(2), d.amount.currency);
+      if (this.isSandbox) {
+        try {
+          await this.paypal().makeOffer(id, value, d.amount.currency, note);
+        } catch (e) {
+          c.filing = { ok: false, message: (e as Error).message };
+          await this.ctx.storage.put(`c:${id}`, c);
+          throw e;
+        }
+      }
+      c.status = this.isSandbox ? "filed" : "settled";
+      c.offer = { amount: value, currency: d.amount.currency, note };
+      c.filing = { ok: true, message: this.isSandbox ? `Partial refund offer of ${d.amount.currency} ${value.toFixed(2)} sent to the buyer through PayPal.` : "Seeded dispute: offer recorded in this workspace only. Nothing was sent to PayPal." };
+      await this.ctx.storage.put(`c:${id}`, c);
+      return c;
+    }
     if (action === "reopen") {
       c.status = "needs_review";
       c.filing = undefined;
+      c.offer = undefined;
     } else if (this.isSandbox) {
       const pp = this.paypal();
       const notes = c.editedNotes ?? c.draft.notes;

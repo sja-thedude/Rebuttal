@@ -5,6 +5,7 @@ import { ThemeProvider } from "./theme";
 import { Router, useRouter } from "./router";
 import { ToastProvider } from "./components/Toasts";
 import Landing from "./pages/Landing";
+import { Assistant } from "./components/Assistant";
 import "./styles.css";
 
 const Console = lazy(() => import("./console/Console"));
@@ -32,6 +33,7 @@ function App() {
       ) : (
         <Landing />
       )}
+      <Assistant />
     </>
   );
 }

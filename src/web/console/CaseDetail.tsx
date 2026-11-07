@@ -2,12 +2,13 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { CustomCellRendererProps } from "ag-grid-react";
 import { PLAYBOOK } from "../../shared/playbook";
 import { ACCEPT_NOTE, evidenceInput } from "../../shared/paypal-payload";
+import { offerNote, suggestOffer } from "../../shared/settle";
 import type { AgentStep, CaseDetail as Detail, DraftEvidence, EvidenceItem, QueueRow, Verdict } from "../../shared/types";
 import { api } from "../api";
 import { useI18n, type Key } from "../i18n";
 import { useCountUp } from "../hooks";
 import { useToast } from "../components/Toasts";
-import { IconAlert, IconBrain, IconCheck, IconFlag, IconRefresh, IconShield, IconTool, IconUndo, IconX } from "../components/Icons";
+import { IconAlert, IconSpark, IconBrain, IconCheck, IconFlag, IconRefresh, IconShield, IconTool, IconUndo, IconX } from "../components/Icons";
 import { VERDICT_CLASS } from "./cells";
 import { useConsole } from "./context";
 
@@ -126,7 +127,7 @@ function ScoreRing({ score, verdict }: { score: number; verdict: "strong" | "wea
 }
 
 function DetailBody({ detail, row }: { detail: Detail; row: QueueRow }) {
-  const { t, verdict, date } = useI18n();
+  const { t, verdict, date, money } = useI18n();
   const { mode, onCaseChanged, rerun } = useConsole();
   const toast = useToast();
   const [tab, setTab] = useState<Tab>("evidence");
@@ -150,7 +151,7 @@ function DetailBody({ detail, row }: { detail: Detail; row: QueueRow }) {
   const decided = c.status !== "needs_review" && c.status !== "processing";
   const dirty = notes !== (c.editedNotes ?? c.draft.notes);
 
-  const act = async (kind: "approve" | "concede" | "reopen" | "save" | "revert") => {
+  const act = async (kind: "approve" | "concede" | "reopen" | "save" | "revert" | "settle", amount?: number) => {
     setBusy(kind);
     try {
       let next;
@@ -158,10 +159,10 @@ function DetailBody({ detail, row }: { detail: Detail; row: QueueRow }) {
       else if (kind === "revert") next = await api.saveDraft(mode, d.id, c.draft.notes);
       else {
         if (dirty) await api.saveDraft(mode, d.id, notes);
-        next = await api.decide(mode, d.id, kind);
+        next = await api.decide(mode, d.id, kind, amount);
       }
       onCaseChanged(d.id, next);
-      toast(kind === "approve" ? t("toast.approved") : kind === "concede" ? t("toast.conceded") : kind === "reopen" ? t("toast.reopened") : t("detail.saved"));
+      toast(kind === "settle" ? t("toast.settled") : kind === "approve" ? t("toast.approved") : kind === "concede" ? t("toast.conceded") : kind === "reopen" ? t("toast.reopened") : t("detail.saved"));
     } catch (e) {
       toast((e as Error).message, true);
     } finally {
@@ -261,12 +262,24 @@ function DetailBody({ detail, row }: { detail: Detail; row: QueueRow }) {
             )}
           </div>
         )}
-        {tab === "payload" && <PayloadView id={d.id} verdict={a.verdict} evidences={c.draft.evidences} notes={notes} />}
+        {tab === "payload" && <PayloadView id={d.id} verdict={a.verdict} evidences={c.draft.evidences} notes={notes} offer={suggestOffer(d.amount.value, a.score, a.verdict)?.value} currency={d.amount.currency} />}
         {tab === "log" && <AgentLog steps={c.log} />}
         {tab === "record" && <RecordView detail={detail} />}
       </div>
 
+      {!decided && <SettlePanel amount={d.amount.value} currency={d.amount.currency} score={a.score} verdict={a.verdict} busy={!!busy} onSend={(v) => act("settle", v)} />}
+      {c.offer && (
+        <div className="note note-ok settle-sent">
+          <IconCheck />
+          {t("settle.sent", { v: money(c.offer.amount, c.offer.currency) })}
+        </div>
+      )}
+
       <div className="detail-actions">
+        <button className="btn btn-sm btn-ai" onClick={() => dispatchEvent(new CustomEvent("rb:assistant", { detail: t("detail.askPrompt", { id: d.id }) }))}>
+          <IconSpark />
+          {t("detail.ask")}
+        </button>
         <span className="muted small">
           {t("detail.engine")}: <strong>{c.engine.kind === "model" ? c.engine.model : t("ws.engineRules")}</strong>
           {c.decidedAt && <> · {t("detail.decided", { when: date(c.decidedAt) })}</>}
@@ -488,7 +501,7 @@ function Request({ method, path, contentType, part, body }: { method: string; pa
   );
 }
 
-function PayloadView({ id, verdict, evidences, notes }: { id: string; verdict: Verdict; evidences: DraftEvidence[]; notes: string }) {
+function PayloadView({ id, verdict, evidences, notes, offer, currency }: { id: string; verdict: Verdict; evidences: DraftEvidence[]; notes: string; offer?: number; currency: string }) {
   const { t } = useI18n();
   const base = `/v1/customer/disputes/${id}`;
   return (
@@ -499,6 +512,47 @@ function PayloadView({ id, verdict, evidences, notes }: { id: string; verdict: V
       )}
       {verdict !== "concede" && <p className="muted small">{t("detail.payloadConcede")}</p>}
       <Request method="POST" path={`${base}/accept-claim`} contentType="application/json" body={{ note: ACCEPT_NOTE }} />
+      {offer != null && (
+        <>
+          <p className="muted small">{t("detail.payloadSettle")}</p>
+          <Request method="POST" path={`${base}/make-offer`} contentType="application/json" body={{ note: offerNote(offer.toFixed(2), currency), offer_amount: { currency_code: currency, value: offer.toFixed(2) }, offer_type: "REFUND" }} />
+        </>
+      )}
     </div>
+  );
+}
+
+/** The third path between fighting and conceding: a partial refund sized by the evidence score. */
+function SettlePanel({ amount, currency, score, verdict, busy, onSend }: { amount: number; currency: string; score: number; verdict: Verdict; busy: boolean; onSend: (v: number) => void }) {
+  const { t, money } = useI18n();
+  const { mode } = useConsole();
+  const s = suggestOffer(amount, score, verdict);
+  const [value, setValue] = useState(s ? s.value.toFixed(2) : "");
+  if (!s) return null;
+  const v = parseFloat(value);
+  const valid = v > 0 && v < amount;
+  return (
+    <section className="settle" aria-label={t("settle.title")}>
+      <div className="settle-copy">
+        <span className="eyebrow">{t("settle.title")}</span>
+        <p>{t("settle.body", { p: Math.round(score), loss: money(amount * (1 - score / 100), currency) })}</p>
+      </div>
+      <div className="settle-form">
+        <label className="settle-field">
+          <span className="small muted">{t("settle.amount")}</span>
+          <span className="settle-input">
+            <span className="mono">{currency}</span>
+            <input type="number" inputMode="decimal" min={1} max={amount - 0.01} step={0.5} value={value} onChange={(e) => setValue(e.target.value)} />
+          </span>
+          <span className="small muted">{t("settle.of", { v: money(amount, currency) })}{valid && <> · {t("settle.saves", { v: money(amount - v, currency) })}</>}</span>
+        </label>
+        <div className="settle-meter" aria-hidden="true">
+          <span style={{ transform: `scaleX(${valid ? v / amount : 0})` }} />
+        </div>
+        <button className="btn btn-settle" onClick={() => onSend(v)} disabled={busy || !valid}>
+          {mode === "sandbox" ? t("settle.sendSandbox") : t("settle.send")}
+        </button>
+      </div>
+    </section>
   );
 }

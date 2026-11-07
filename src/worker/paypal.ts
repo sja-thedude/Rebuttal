@@ -157,6 +157,14 @@ export class PayPalClient {
     }
   }
 
+  /** Offers the buyer a partial refund to settle the dispute. */
+  async makeOffer(id: string, amount: number, currency: string, note: string) {
+    await this.request(`/v1/customer/disputes/${encodeURIComponent(id)}/make-offer`, {
+      method: "POST",
+      body: JSON.stringify({ note: note.slice(0, 2000), offer_amount: { currency_code: currency, value: amount.toFixed(2) }, offer_type: "REFUND" }),
+    });
+  }
+
   async acceptClaim(id: string, note: string) {
     await this.request(`/v1/customer/disputes/${encodeURIComponent(id)}/accept-claim`, { method: "POST", body: JSON.stringify({ note: note.slice(0, 2000) }) });
   }

@@ -164,7 +164,7 @@ export function EvidenceCell({ data }: P) {
   );
 }
 
-const STATUS_CLASS = { needs_review: "", approved: "pill-strong", conceded: "pill-concede", filed: "pill-accent", processing: "pill-info pill-processing" } as const;
+const STATUS_CLASS = { needs_review: "", approved: "pill-strong", conceded: "pill-concede", settled: "pill-weak", filed: "pill-accent", processing: "pill-info pill-processing" } as const;
 
 export function StatusCell({ data }: P) {
   const { status } = useI18n();
