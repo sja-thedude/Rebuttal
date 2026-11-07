@@ -28,9 +28,12 @@ import { useCountUp } from "../hooks";
 import { useToast } from "../components/Toasts";
 import { TopBar } from "../components/TopBar";
 import { IllusEmptyQueue, IllusError } from "../components/Illustrations";
-import { IconCheck, IconClock, IconDownload, IconPlay, IconRefresh, IconSearch, IconX } from "../components/Icons";
+import { IconChart, IconCheck, IconClock, IconDownload, IconPlay, IconRefresh, IconSearch, IconX } from "../components/Icons";
 import { BuyerCell, DueCell, EngineCell, EvidenceCell, GroupInner, IdCell, ReasonCell, ScoreCell, StatusCell, VerdictCell, dueInfo } from "./cells";
 import { CaseDetailRow } from "./CaseDetail";
+import { CHART_THEMES } from "./chart-theme";
+import { Insights } from "./Insights";
+import { Palette } from "./Palette";
 import { ConsoleCtx, type ConsoleApi } from "./context";
 import { LiveRun, type LiveRunProps } from "./LiveRun";
 import "./console.css";
@@ -59,6 +62,23 @@ ModuleRegistry.registerModules([
   StatusBarModule,
   ...(import.meta.env.DEV ? [ValidationModule] : []),
 ]);
+// The chart engine is a separate chunk, fetched in parallel with the workspace.
+const chartsLoaded = import("./charts").then(
+  (m) => {
+    ModuleRegistry.registerModules([m.ChartsModule]);
+    return true;
+  },
+  () => false
+);
+
+const readInsights = () => {
+  try {
+    return localStorage.getItem("rb-insights") !== "0";
+  } catch {
+    return true;
+  }
+};
+
 const LICENSE = import.meta.env.VITE_AG_GRID_LICENSE_KEY as string | undefined;
 if (LICENSE) LicenseManager.setLicenseKey(LICENSE);
 
@@ -189,6 +209,38 @@ export default function Console() {
     setLive(target);
   };
   const gridApi = useRef<GridApi<QueueRow> | null>(null);
+  const [grid, setGrid] = useState<GridApi<QueueRow> | null>(null);
+  const [charts, setCharts] = useState<boolean | null>(null);
+  const [showInsights, setShowInsights] = useState(readInsights);
+  const toggleInsights = () =>
+    setShowInsights((v) => {
+      try {
+        localStorage.setItem("rb-insights", v ? "0" : "1");
+      } catch {
+        /* storage unavailable */
+      }
+      return !v;
+    });
+
+  useEffect(() => {
+    chartsLoaded.then(setCharts);
+  }, []);
+
+  const [palette, setPalette] = useState(false);
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPalette((v) => !v);
+      } else if (e.key === "/" && !/^(INPUT|TEXTAREA|SELECT)$/.test((e.target as HTMLElement).tagName)) {
+        e.preventDefault();
+        document.querySelector<HTMLInputElement>(".toolbar .search input")?.focus();
+      }
+    };
+    addEventListener("keydown", on);
+    return () => removeEventListener("keydown", on);
+  }, []);
+  const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
   const [narrow, setNarrow] = useState(() => innerWidth < 760);
 
   useEffect(() => {
@@ -273,13 +325,14 @@ export default function Console() {
             getQuickFilterText: (p) => reason(p.value),
             valueFormatter: (p) => (p.value ? reason(p.value) : ""),
           },
+          { colId: "reasonLabel", headerName: t("col.reason"), hide: true, chartDataType: "category", valueGetter: (p) => (p.data ? reason(p.data.reason) : ""), filter: "agSetColumnFilter", suppressColumnsToolPanel: true },
           { field: "stage", headerName: t("col.stage"), minWidth: 120, hide: true, valueFormatter: (p) => (p.value ? t(`stage.${p.value}` as never) : ""), filter: "agSetColumnFilter" },
         ],
       },
       {
         headerName: t("col.money"),
         children: [
-          { field: "amount", headerName: t("col.amount"), type: "rightAligned", minWidth: 124, cellClass: "mono tnum", valueFormatter: (p) => (p.data ? money(p.value, p.data.currency) : ""), filter: "agNumberColumnFilter", aggFunc: "sum" },
+          { field: "amount", headerName: t("col.amount"), type: "rightAligned", minWidth: 124, cellClass: "mono tnum", valueFormatter: (p) => (p.data ? money(p.value, p.data.currency) : ""), filter: "agNumberColumnFilter", aggFunc: "sum", chartDataType: "series" },
         ],
       },
       {
@@ -301,6 +354,7 @@ export default function Console() {
             getQuickFilterText: (p) => (p.value ? verdict(p.value) : ""),
             valueFormatter: (p) => (p.value ? verdict(p.value) : ""),
           },
+          { colId: "verdictLabel", headerName: t("col.verdict"), hide: true, chartDataType: "category", valueGetter: (p) => (p.data?.verdict ? verdict(p.data.verdict) : ""), filter: "agSetColumnFilter", suppressColumnsToolPanel: true },
           { field: "score", headerName: t("col.score"), cellRenderer: ScoreCell, minWidth: 150, hide: narrow, filter: "agNumberColumnFilter" },
           { colId: "evidence", headerName: t("col.evidence"), valueGetter: (p) => (p.data ? p.data.found / Math.max(1, p.data.needed) : null), cellRenderer: EvidenceCell, minWidth: 140, hide: true, valueFormatter: (p) => (p.data ? `${p.data.found}/${p.data.needed}` : "") },
         ],
@@ -398,6 +452,7 @@ export default function Console() {
     setLive(null);
     setFilter("all");
     setQuick("");
+    gridApi.current?.setFilterModel(null);
     requestAnimationFrame(() => {
       const node = gridApi.current?.getRowNode(id);
       if (!node) return;
@@ -486,13 +541,21 @@ export default function Console() {
               )}
             </section>
 
+            <div id="insights" className={`insights-wrap${showInsights && ws ? " open" : ""}`} aria-hidden={!showInsights}>
+              <div>{ws && showInsights && <Insights api={grid} rows={rows} charts={charts === true} />}</div>
+            </div>
+
             <section className="queue card rise" style={{ ["--i" as string]: 2 }} aria-label="Dispute queue">
               <div className="toolbar">
                 <label className="search">
                   <IconSearch />
                   <span className="sr-only">{t("toolbar.search")}</span>
                   <input className="input" type="search" placeholder={t("toolbar.search")} value={quick} onChange={(e) => setQuick(e.target.value)} />
+                  <kbd className="search-kbd" aria-hidden="true">/</kbd>
                 </label>
+                <button className="btn btn-ghost palette-trigger" onClick={() => setPalette(true)} aria-label={t("palette.open")} title={t("palette.open")}>
+                  <kbd>{isMac ? "⌘K" : "Ctrl K"}</kbd>
+                </button>
                 <Seg label="Status" value={filter} onChange={setFilter} options={STATUS_FILTERS.map((f) => ({ v: f, label: f === "all" ? t("toolbar.filterAll") : status(f) }))} />
                 <span className="spacer" />
                 <Seg
@@ -505,6 +568,10 @@ export default function Console() {
                     { v: "verdict", label: t("toolbar.groupVerdict") },
                   ]}
                 />
+                <button className="btn btn-ghost" onClick={toggleInsights} aria-pressed={showInsights} aria-controls="insights">
+                  <IconChart />
+                  {t("insights.toggle")}
+                </button>
                 <button className="btn" onClick={exportCsv} disabled={!ws}>
                   <IconDownload />
                   {t("toolbar.export")}
@@ -528,7 +595,7 @@ export default function Console() {
               </div>
 
               <div className="grid-wrap">
-                {!ws ? (
+                {!ws || charts === null ? (
                   <GridSkeleton />
                 ) : (
                   <AgGridReact<QueueRow>
@@ -557,8 +624,17 @@ export default function Console() {
                     rowSelection={{ mode: "multiRow", checkboxes: true, headerCheckbox: true, enableClickSelection: false, isRowSelectable: (n) => n.data?.status === "needs_review" }}
                     selectionColumnDef={{ pinned: narrow ? undefined : dir === "rtl" ? "right" : "left", width: 52, minWidth: 52, maxWidth: 52 }}
                     onSelectionChanged={(e) => setSelected(e.api.getSelectedRows().map((r) => r.id))}
-                    onGridReady={(e) => (gridApi.current = e.api)}
-                    onGridPreDestroyed={() => (gridApi.current = null)}
+                    onGridReady={(e) => {
+                      gridApi.current = e.api;
+                      setGrid(e.api);
+                    }}
+                    onGridPreDestroyed={() => {
+                      gridApi.current = null;
+                      setGrid(null);
+                    }}
+                    enableCharts={charts === true}
+                    customChartThemes={CHART_THEMES}
+                    chartThemes={["rb-light", "rb-dark"]}
                     animateRows
                     noRowsOverlayComponent={NoRows}
                     statusBar={{
@@ -581,6 +657,16 @@ export default function Console() {
           </>
         )}
       </main>
+      {palette && (
+        <Palette
+          rows={rows}
+          onClose={() => setPalette(false)}
+          onOpenCase={openCase}
+          onLive={mode === "demo" && ws && ws.liveRunsLeft > 0 ? () => startLive({ kind: "fresh" }) : undefined}
+          onExport={exportCsv}
+          onInsights={toggleInsights}
+        />
+      )}
       {live && ws && (
         <LiveRun
           key={liveKey}

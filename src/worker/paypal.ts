@@ -1,5 +1,6 @@
 // PayPal REST client, sandbox only. The base URL is fixed so live credentials can never be used.
 import type { Dispute, DraftEvidence, ReasonCode, Transaction } from "../shared/types";
+import { evidenceInput } from "../shared/paypal-payload";
 
 const API = "https://api-m.sandbox.paypal.com";
 
@@ -90,7 +91,7 @@ export class PayPalClient {
   }
 
   async provideEvidence(id: string, evidences: DraftEvidence[], notes: string) {
-    const input = { evidences: evidences.map(({ cites: _c, ...e }) => ({ ...e, notes: (e.notes || notes).slice(0, 2000) })) };
+    const input = evidenceInput(evidences, notes);
     const form = new FormData();
     form.append("input", new Blob([JSON.stringify(input)], { type: "application/json" }));
     const res = await fetch(`${API}/v1/customer/disputes/${encodeURIComponent(id)}/provide-evidence`, {

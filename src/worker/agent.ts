@@ -163,18 +163,22 @@ Hard rules:
 - If draft_response rejects your draft, fix exactly the problems it lists and resubmit.`;
 }
 
-async function runModel(run: Run, id: string, model: { key: string; name: string }) {
+/** Runs the tool loop and returns the model that actually answered. */
+async function runModel(run: Run, id: string, model: { key: string; name: string }): Promise<string> {
+  let used = model.name.split(",")[0].trim();
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt({ id }) },
     { role: "user", content: `New dispute ${id} needs a response. Prepare it.` },
   ];
   for (let turn = 0; turn < MAX_TURNS; turn++) {
-    const reply = await chat(model.key, model.name, messages, TOOLS);
+    const res = await chat(model.key, model.name, messages, TOOLS);
+    const reply = res.message;
+    used = res.model;
     messages.push({ role: "assistant", content: reply.content ?? null, tool_calls: reply.tool_calls });
     const thought = reply.content?.trim();
     if (!reply.tool_calls?.length) {
       if (thought) await run.step({ kind: "reasoning", title: "Reasoning", reasoning: thought });
-      if (run.draft) return;
+      if (run.draft) return used;
       messages.push({ role: "user", content: "You have not submitted a draft yet. Continue with the process and call draft_response." });
       continue;
     }
@@ -188,14 +192,15 @@ async function runModel(run: Run, id: string, model: { key: string; name: string
       const { result } = await run.tool(call.function.name, args, n === 0 ? thought : undefined);
       messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result).slice(0, 6000) });
     }
-    if (run.draft) return;
+    if (run.draft) return used;
   }
   throw new Error(`No accepted draft after ${MAX_TURNS} turns`);
 }
 
 async function runRules(run: Run, id: string) {
   await run.tool("get_dispute", { id }, "Start with the dispute itself: the reason code decides which evidence matters.");
-  const d = run.dispute!;
+  const d = run.dispute;
+  if (!d) throw new Error(`Dispute ${id} not found`);
   const pb = PLAYBOOK[d.reason];
   const reqs = requirementsFor(d, null);
   await run.step({ kind: "plan", title: `Plan for "${pb.label}"`, reasoning: `${pb.question} That needs: ${reqs.map((r) => r.label.toLowerCase()).join("; ")}.` });
@@ -213,7 +218,7 @@ export async function runAgent(src: DataSource, id: string, opts: RunOptions): P
   let engine: CaseFile["engine"] = opts.model ? { kind: "model", model: opts.model.name } : { kind: "rules" };
   if (opts.model) {
     try {
-      await runModel(run, id, opts.model);
+      engine = { kind: "model", model: await runModel(run, id, opts.model) };
     } catch (e) {
       await run.step({ kind: "error", title: "Model run stopped", reasoning: `${(e as Error).message}. Finishing with the rules engine so the merchant still gets a grounded draft.` });
       engine = { kind: "rules" };

@@ -58,3 +58,54 @@ export function useScrolled(px = 8) {
   }, [px]);
   return s;
 }
+
+/** Pointer-driven polish for the landing page: card spotlights, hero tilt and a scroll progress bar. */
+export function usePointerFx<T extends HTMLElement>(ref: React.RefObject<T | null>) {
+  useEffect(() => {
+    const root = ref.current;
+    if (!root) return;
+    const bar = document.querySelector<HTMLElement>(".scroll-progress");
+    let raf = 0;
+    const onScroll = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const max = document.documentElement.scrollHeight - innerHeight;
+        bar?.style.setProperty("--p", String(max > 0 ? scrollY / max : 0));
+      });
+    };
+    onScroll();
+    addEventListener("scroll", onScroll, { passive: true });
+    if (reduced() || !matchMedia("(pointer: fine)").matches) return () => removeEventListener("scroll", onScroll);
+
+    const onMove = (e: PointerEvent) => {
+      const card = (e.target as HTMLElement).closest<HTMLElement>(".card.lift, .vcard, .pipe");
+      if (card) {
+        const r = card.getBoundingClientRect();
+        card.style.setProperty("--mx", `${e.clientX - r.left}px`);
+        card.style.setProperty("--my", `${e.clientY - r.top}px`);
+      }
+      const tilt = (e.target as HTMLElement).closest<HTMLElement>(".hero-visual");
+      if (tilt) {
+        const r = tilt.getBoundingClientRect();
+        const x = (e.clientX - r.left) / r.width - 0.5;
+        const y = (e.clientY - r.top) / r.height - 0.5;
+        tilt.style.setProperty("--rx", `${(-y * 6).toFixed(2)}deg`);
+        tilt.style.setProperty("--ry", `${(x * 8).toFixed(2)}deg`);
+      }
+    };
+    const onLeave = (e: PointerEvent) => {
+      const tilt = (e.target as HTMLElement).closest?.<HTMLElement>(".hero-visual");
+      if (tilt && !tilt.contains(e.relatedTarget as Node)) {
+        tilt.style.setProperty("--rx", "0deg");
+        tilt.style.setProperty("--ry", "0deg");
+      }
+    };
+    root.addEventListener("pointermove", onMove);
+    root.addEventListener("pointerout", onLeave);
+    return () => {
+      removeEventListener("scroll", onScroll);
+      root.removeEventListener("pointermove", onMove);
+      root.removeEventListener("pointerout", onLeave);
+    };
+  }, [ref]);
+}
