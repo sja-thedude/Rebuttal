@@ -23,7 +23,7 @@ export const api = {
   sync: (m: Mode) => call<{ added: number; total: number }>(m, "/workspace/sync", { method: "POST" }),
   detail: (m: Mode, id: string) => call<CaseDetail>(m, `/disputes/${id}`),
   saveDraft: (m: Mode, id: string, notes: string) => call<CaseFile>(m, `/disputes/${id}/draft`, { method: "PUT", body: JSON.stringify({ notes }) }),
-  decide: (m: Mode, id: string, action: "approve" | "concede" | "reopen") => call<CaseFile>(m, `/disputes/${id}/decision`, { method: "POST", body: JSON.stringify({ action }) }),
+  decide: (m: Mode, id: string, action: "approve" | "concede" | "reopen" | "settle", amount?: number) => call<CaseFile>(m, `/disputes/${id}/decision`, { method: "POST", body: JSON.stringify({ action, amount }) }),
   bulk: (m: Mode, ids: string[], action: "approve" | "concede") => call<{ done: string[]; failed: { id: string; message: string }[] }>(m, "/disputes/bulk", { method: "POST", body: JSON.stringify({ ids, action }) }),
 };
 

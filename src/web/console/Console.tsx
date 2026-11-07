@@ -236,6 +236,18 @@ export default function Console() {
     addEventListener("keydown", on);
     return () => removeEventListener("keydown", on);
   }, []);
+  const openRef = useRef<(id: string) => void>(() => {});
+  const reloadRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    const on = (e: Event) => openRef.current((e as CustomEvent<string>).detail);
+    const reload = () => reloadRef.current();
+    addEventListener("rb:open-case", on);
+    addEventListener("rb:reload", reload);
+    return () => {
+      removeEventListener("rb:open-case", on);
+      removeEventListener("rb:reload", reload);
+    };
+  }, []);
   const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
   const [narrow, setNarrow] = useState(() => innerWidth < 760);
 
@@ -384,7 +396,7 @@ export default function Console() {
       {
         headerName: t("col.review"),
         children: [
-          { field: "status", headerName: t("col.status"), cellRenderer: StatusCell, minWidth: 136, hide: narrow, ...choice(["needs_review", "approved", "conceded", "filed", "processing"] as const, status), valueFormatter: (p) => (p.value ? status(p.value) : ""), getQuickFilterText: (p) => status(p.value) },
+          { field: "status", headerName: t("col.status"), cellRenderer: StatusCell, minWidth: 136, hide: narrow, ...choice(["needs_review", "approved", "conceded", "settled", "filed", "processing"] as const, status), valueFormatter: (p) => (p.value ? status(p.value) : ""), getQuickFilterText: (p) => status(p.value) },
           { field: "engine", headerName: t("col.engine"), cellRenderer: EngineCell, minWidth: 140, hide: true },
         ],
       },
@@ -484,6 +496,17 @@ export default function Console() {
       flash(id);
     });
   };
+
+  openRef.current = openCase;
+  // After the assistant runs a confirmed action, refresh rows in place without the loading skeleton.
+  reloadRef.current = () =>
+    api.workspace(mode).then(
+      (info) => {
+        setRows(info.rows);
+        requestAnimationFrame(() => info.rows.forEach((r) => flash(r.id)));
+      },
+      () => {}
+    );
 
   return (
     <ConsoleCtx.Provider value={consoleApi}>

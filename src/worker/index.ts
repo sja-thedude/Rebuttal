@@ -1,4 +1,5 @@
 import type { Workspace } from "./workspace";
+import { chatStream, systemPrompt, type ChatTurn } from "./chat";
 
 export { SandboxWorkspace, Workspace } from "./workspace";
 
@@ -40,7 +41,7 @@ export default {
 
     let res: Response;
     try {
-      res = await route(request, path, stub);
+      res = await route(request, path, stub, env);
     } catch (e) {
       res = fail(400, (e as Error).message.replace(/^Error: /, ""));
     }
@@ -52,9 +53,24 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
-async function route(req: Request, path: string, ws: DurableObjectStub<Workspace>): Promise<Response> {
+async function route(req: Request, path: string, ws: DurableObjectStub<Workspace>, env: Env): Promise<Response> {
   const m = req.method;
   const body = async <T>() => (await req.json().catch(() => ({}))) as T;
+
+  if (m === "POST" && path === "/api/chat") {
+    if (!env.OPENROUTER_API_KEY || !env.OPENROUTER_MODEL) return fail(503, "The assistant isn't configured on this deployment.");
+    const b = await body<{ messages?: ChatTurn[]; lang?: string; page?: string }>();
+    const turns = (Array.isArray(b.messages) ? b.messages : [])
+      .filter((t) => (t.role === "user" || t.role === "assistant") && typeof t.content === "string" && t.content.trim())
+      .slice(-10)
+      .map((t) => ({ role: t.role, content: t.content.slice(0, 1500) }));
+    if (!turns.length || turns[turns.length - 1].role !== "user") return fail(400, "Ask a question first.");
+    const page = b.page === "console" ? "console" : "landing";
+    const ids = [...new Set(turns.flatMap((t) => t.content.toUpperCase().match(/PP-[A-Z0-9]+(?:-[A-Z0-9]+)+/g) ?? []))].slice(-3);
+    const ctx = await ws.chatContext(page === "console" ? ids : []);
+    if (!ctx) return fail(429, "You've reached today's limit for assistant questions. It resets tomorrow.");
+    return sse(chatStream(env.OPENROUTER_API_KEY, env.OPENROUTER_MODEL, systemPrompt(String(b.lang ?? "en"), page, page === "console" ? ctx : null), turns));
+  }
 
   if (m === "GET" && path === "/api/workspace") return Response.json(await ws.info());
   if (m === "POST" && path === "/api/workspace/reset") {
@@ -83,9 +99,9 @@ async function route(req: Request, path: string, ws: DurableObjectStub<Workspace
       return Response.json(await ws.saveDraft(id, b.notes));
     }
     if (action === "decision" && m === "POST") {
-      const b = await body<{ action?: string }>();
-      if (b.action !== "approve" && b.action !== "concede" && b.action !== "reopen") return fail(400, "Unknown decision.");
-      return Response.json(await ws.decide(id, b.action));
+      const b = await body<{ action?: string; amount?: number }>();
+      if (b.action !== "approve" && b.action !== "concede" && b.action !== "reopen" && b.action !== "settle") return fail(400, "Unknown decision.");
+      return Response.json(await ws.decide(id, b.action, Number(b.amount)));
     }
   }
   return fail(404, "Not found");

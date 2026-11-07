@@ -146,7 +146,7 @@ export interface AgentStep {
   ms?: number;
 }
 
-export type CaseStatus = "needs_review" | "approved" | "conceded" | "filed" | "processing";
+export type CaseStatus = "needs_review" | "approved" | "conceded" | "settled" | "filed" | "processing";
 
 export interface CaseFile {
   disputeId: string;
@@ -159,6 +159,7 @@ export interface CaseFile {
   processedAt: string;
   decidedAt?: string;
   filing?: { ok: boolean; message: string };
+  offer?: { amount: number; currency: string; note: string };
 }
 
 export interface QueueRow {

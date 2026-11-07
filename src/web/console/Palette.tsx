@@ -3,7 +3,7 @@ import type { QueueRow } from "../../shared/types";
 import { LANGS, useI18n } from "../i18n";
 import { useTheme } from "../theme";
 import { useRouter } from "../router";
-import { IconArrow, IconChart, IconDownload, IconFile, IconGlobe, IconMoon, IconPlay, IconSearch, IconSun } from "../components/Icons";
+import { IconArrow, IconChart, IconSpark, IconDownload, IconFile, IconGlobe, IconMoon, IconPlay, IconSearch, IconSun } from "../components/Icons";
 import { VERDICT_CLASS } from "./cells";
 
 interface Item {
@@ -44,6 +44,7 @@ export function Palette({ rows, onClose, onOpenCase, onLive, onExport, onInsight
     const other = resolved === "dark" ? "light" : "dark";
     const actions: Item[] = [
       ...(onLive ? [{ id: "live", group: "actions" as const, label: t("toolbar.live"), icon: <IconPlay />, keywords: "live run agent new process", run: onLive }] : []),
+      { id: "ask", group: "actions", label: t("palette.ask"), icon: <IconSpark />, keywords: "ai assistant chat ask question help", run: () => dispatchEvent(new CustomEvent("rb:assistant")) },
       { id: "insights", group: "actions", label: t("palette.insights"), icon: <IconChart />, keywords: "insights charts analytics", run: onInsights },
       { id: "export", group: "actions", label: t("toolbar.export"), icon: <IconDownload />, keywords: "export csv download", run: onExport },
       { id: "theme", group: "actions", label: t("palette.theme", { mode: t(`palette.${other}`) }), icon: other === "dark" ? <IconMoon /> : <IconSun />, keywords: "theme dark light mode", run: () => setPref(other) },
