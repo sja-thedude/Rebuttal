@@ -68,20 +68,68 @@ export class PayPalClient {
     };
   }
 
-  /** Looks up a transaction in the reporting API within 31 days either side of the dispute. */
+  /**
+   * Looks up a transaction in the reporting API within 62 days before the dispute. Transaction
+   * Search is a separate app permission and new sandbox data reaches it with a delay, so when it
+   * fails or finds nothing the capture and its order are read from the Payments and Orders APIs.
+   */
   async getTransaction(id: string, around: string): Promise<Transaction | null> {
     const at = Date.parse(around);
-    for (const [from, to] of [[at - 31 * 864e5, at], [at - 62 * 864e5, at - 31 * 864e5]]) {
-      const rows = await this.search({ transaction_id: id }, from, Math.min(to, Date.now()));
-      if (rows.length) return rows[0];
+    try {
+      for (const [from, to] of [[at - 31 * 864e5, at], [at - 62 * 864e5, at - 31 * 864e5]]) {
+        const rows = await this.search({ transaction_id: id }, from, Math.min(to, Date.now()));
+        if (rows.length) return rows[0];
+      }
+    } catch {
+      /* fall through to the Orders API */
     }
-    return null;
+    return this.fromCapture(id);
   }
 
   async searchByBuyer(email: string, around: string): Promise<Transaction[]> {
     const at = Math.min(Date.parse(around), Date.now());
-    const rows = await this.search({}, at - 31 * 864e5, at);
-    return rows.filter((r) => r.buyer.email.toLowerCase() === email.toLowerCase());
+    try {
+      const rows = await this.search({}, at - 31 * 864e5, at);
+      return rows.filter((r) => r.buyer.email.toLowerCase() === email.toLowerCase());
+    } catch {
+      return [];
+    }
+  }
+
+  private async fromCapture(id: string): Promise<Transaction | null> {
+    const cap = await this.request<PPCapture>(`/v2/payments/captures/${encodeURIComponent(id)}`).catch(() => null);
+    if (!cap) return null;
+    const orderId = cap.supplementary_data?.related_ids?.order_id ?? cap.links?.find((l) => l.rel === "up")?.href.split("/").pop();
+    const o = orderId ? await this.request<PPOrder>(`/v2/checkout/orders/${encodeURIComponent(orderId)}`).catch(() => null) : null;
+    const pu = o?.purchase_units?.[0];
+    const a = pu?.shipping?.address;
+    const payer = o?.payer;
+    let shipment: Transaction["shipment"];
+    const tr = pu?.shipping?.trackers?.[0];
+    if (tr) {
+      const t = await this.request<PPTracker>(`/v1/shipping/trackers/${encodeURIComponent(tr.id)}`).catch(() => null);
+      shipment = {
+        carrier: t?.carrier_name_other ?? t?.carrier ?? "Carrier",
+        trackingNumber: t?.tracking_number ?? tr.id.slice(tr.id.indexOf("-") + 1),
+        shippedAt: tr.create_time,
+        status: t?.status === "DELIVERED" ? "delivered" : "in_transit",
+      };
+    }
+    return {
+      id: cap.id,
+      origin: "paypal-sandbox",
+      invoiceId: cap.invoice_id ?? pu?.invoice_id ?? cap.id,
+      date: cap.create_time,
+      amount: { value: Number(cap.amount.value), currency: cap.amount.currency_code },
+      buyer: { name: [payer?.name?.given_name, payer?.name?.surname].filter(Boolean).join(" ") || pu?.shipping?.name?.full_name || "Buyer", email: payer?.email_address ?? "", payerId: payer?.payer_id ?? "" },
+      items: (pu?.items ?? []).map((i) => ({ name: i.name, sku: i.sku ?? "", quantity: Number(i.quantity ?? 1), unitPrice: Number(i.unit_amount?.value ?? 0), description: i.description ?? "" })),
+      fulfilment: "physical",
+      shippingAddress: a ? [a.address_line_1, a.admin_area_2, a.country_code].filter(Boolean).join(", ") : undefined,
+      shipment,
+      refunds: [],
+      messages: [],
+      policy: { returnWindowDays: 30, shownAtCheckout: false, text: "" },
+    };
   }
 
   private async search(filter: Record<string, string>, from: number, to: number): Promise<Transaction[]> {
@@ -129,6 +177,24 @@ interface PPTransaction {
   shipping_info?: { address?: { line1?: string; city?: string; country_code?: string } };
   cart_info?: { item_details?: { item_name?: string; item_code?: string; item_quantity?: string; item_unit_price?: { value: string }; item_description?: string }[] };
 }
+
+interface PPCapture {
+  id: string;
+  invoice_id?: string;
+  create_time: string;
+  amount: { value: string; currency_code: string };
+  links?: { rel: string; href: string }[];
+  supplementary_data?: { related_ids?: { order_id?: string } };
+}
+interface PPOrder {
+  payer?: { email_address?: string; payer_id?: string; name?: { given_name?: string; surname?: string } };
+  purchase_units?: {
+    invoice_id?: string;
+    items?: { name: string; sku?: string; quantity?: string; unit_amount?: { value: string }; description?: string }[];
+    shipping?: { name?: { full_name?: string }; address?: { address_line_1?: string; admin_area_2?: string; country_code?: string }; trackers?: { id: string; create_time?: string }[] };
+  }[];
+}
+interface PPTracker { tracking_number?: string; carrier?: string; carrier_name_other?: string; status?: string }
 
 function mapTransaction(t: PPTransaction): Transaction {
   const ti = t.transaction_info;

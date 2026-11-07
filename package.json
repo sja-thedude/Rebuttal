@@ -11,7 +11,8 @@
     "deploy": "npm run build && wrangler deploy",
     "gate": "node scripts/paypal-gate.mjs",
     "typecheck": "tsc -b",
-    "agent": "tsx scripts/agent-cli.ts"
+    "agent": "tsx scripts/agent-cli.ts",
+    "sandbox:order": "node scripts/sandbox-order.mjs"
   },
   "dependencies": {
     "@ag-grid-community/locale": "^36.2.0",

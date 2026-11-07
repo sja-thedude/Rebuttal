@@ -185,6 +185,7 @@ const en = {
   "palette.insights": "Show or hide insights",
   "palette.navigate": "navigate",
   "palette.select": "open",
+  "error.toDemo": "Open the demo workspace",
 };
 
 type Dict = Record<keyof typeof en, string>;
@@ -355,6 +356,7 @@ const ar: Dict = {
   "palette.insights": "إظهار التحليلات أو إخفاؤها",
   "palette.navigate": "تنقّل",
   "palette.select": "فتح",
+  "error.toDemo": "افتح مساحة العرض",
 };
 
 const fr: Dict = {
@@ -523,6 +525,7 @@ const fr: Dict = {
   "palette.insights": "Afficher ou masquer les analyses",
   "palette.navigate": "naviguer",
   "palette.select": "ouvrir",
+  "error.toDemo": "Ouvrir l’espace de démonstration",
 };
 
 const es: Dict = {
@@ -691,6 +694,7 @@ const es: Dict = {
   "palette.insights": "Mostrar u ocultar análisis",
   "palette.navigate": "navegar",
   "palette.select": "abrir",
+  "error.toDemo": "Abrir el espacio de demostración",
 };
 
 const DICTS: Record<Lang, Dict> = { en, ar, fr, es };
