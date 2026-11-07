@@ -62,7 +62,11 @@ export class PayPalClient {
       amount: { value: Number(d.dispute_amount?.value ?? 0), currency: d.dispute_amount?.currency_code ?? "USD" },
       createdAt: d.create_time,
       responseDueAt: d.seller_response_due_date ?? new Date(Date.parse(d.create_time) + 10 * 86400_000).toISOString(),
-      buyerClaim: d.messages?.find((m) => m.posted_by === "BUYER")?.content ?? d.extensions?.buyer_contacted_channel ?? "No message from the buyer on the dispute.",
+      // The buyer's own words arrive either as a message or as the notes on evidence they submitted.
+      buyerClaim:
+        d.messages?.find((m) => m.posted_by === "BUYER")?.content ??
+        d.evidences?.find((e) => e.notes && !/SELLER/i.test(e.source ?? ""))?.notes ??
+        "No message from the buyer on the dispute.",
       buyer: { name: t?.buyer?.name ?? "Buyer", email: t?.buyer?.email ?? "", payerId: t?.buyer?.payer_id ?? "" },
       transactionId: t?.seller_transaction_id ?? t?.buyer_transaction_id ?? "",
     };
@@ -168,7 +172,7 @@ interface PPDispute {
   dispute_amount?: { value: string; currency_code: string };
   seller_response_due_date?: string;
   messages?: { posted_by: string; content: string }[];
-  extensions?: { buyer_contacted_channel?: string };
+  evidences?: { notes?: string; source?: string }[];
   disputed_transactions?: { seller_transaction_id?: string; buyer_transaction_id?: string; buyer?: { name?: string; email?: string; payer_id?: string } }[];
 }
 interface PPTransaction {
