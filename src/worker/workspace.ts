@@ -4,6 +4,7 @@ import { ACCEPT_NOTE } from "../shared/paypal-payload";
 import { offerNote } from "../shared/settle";
 import { runAgent, type DataSource } from "./agent";
 import type { ChatContext } from "./chat";
+import { PLAYBOOK } from "../shared/playbook";
 import { PayPalClient } from "./paypal";
 import { freshDispute, MERCHANT, seedWorkspace } from "./seed";
 import type { Env } from "./index";
@@ -11,6 +12,7 @@ import type { Env } from "./index";
 const LIVE_RUNS_PER_DAY = 25;
 const GLOBAL_MODEL_RUNS_PER_DAY = 600;
 const CHATS_PER_DAY = 60;
+const STUDIO_TURNS_PER_DAY = 300;
 
 interface Meta {
   createdAt: number;
@@ -21,6 +23,8 @@ interface Meta {
   syncedAt?: number;
   chatDay?: string;
   chats?: number;
+  studioDay?: string;
+  studioTurns?: number;
 }
 
 export function toRow(d: Dispute, c: CaseFile | null | undefined): QueueRow {
@@ -164,6 +168,57 @@ export class Workspace extends DurableObject<Env> {
       if (dispute) cases.push({ dispute, caseFile: (await this.ctx.storage.get<CaseFile>(`c:${id}`)) ?? null });
     }
     return { merchant: info.merchant, mode: info.mode, rows: info.rows, cases };
+  }
+
+  /** One model turn for the AG Studio agents. Each request in their tool loop counts once. */
+  async takeStudioTurn(): Promise<boolean> {
+    const meta = await this.meta();
+    if (meta.studioDay !== today()) Object.assign(meta, { studioDay: today(), studioTurns: 0 });
+    if ((meta.studioTurns ?? 0) >= STUDIO_TURNS_PER_DAY) return false;
+    meta.studioTurns = (meta.studioTurns ?? 0) + 1;
+    await this.ctx.storage.put("meta", meta);
+    return true;
+  }
+
+  /** Flat tables for the AG Studio dashboard: one row per dispute, one row per evidence requirement. */
+  async analytics(): Promise<{ disputes: Record<string, unknown>[]; evidence: Record<string, unknown>[] }> {
+    await this.meta();
+    const disputes = await this.ctx.storage.list<Dispute>({ prefix: "d:" });
+    const cases = await this.ctx.storage.list<CaseFile>({ prefix: "c:" });
+    const now = Date.now();
+    const rows: Record<string, unknown>[] = [];
+    const evidence: Record<string, unknown>[] = [];
+    for (const d of disputes.values()) {
+      const c = cases.get(`c:${d.id}`);
+      const a = c?.assessment;
+      const items = (a?.items ?? []).filter((i) => i.status !== "not_needed");
+      const found = items.filter((i) => i.status === "found").length;
+      const open = !c || c.status === "needs_review" || c.status === "processing";
+      rows.push({
+        id: d.id,
+        reason: PLAYBOOK[d.reason]?.short ?? d.reason,
+        stage: d.stage,
+        amount: d.amount.value,
+        currency: d.amount.currency,
+        buyer: d.buyer.name,
+        created: d.createdAt.slice(0, 10),
+        due: d.responseDueAt.slice(0, 10),
+        hoursLeft: Math.round((Date.parse(d.responseDueAt) - now) / 36e5),
+        verdict: a?.verdict ?? "pending",
+        score: a?.score ?? 0,
+        status: c?.status ?? "processing",
+        open: open ? "Open" : "Decided",
+        evidenceFound: found,
+        evidenceNeeded: items.length,
+        coverage: items.length ? found / items.length : 0,
+        expectedRecovery: open && a && a.verdict !== "concede" ? Math.round(d.amount.value * a.score) / 100 : 0,
+        engine: c?.engine.kind === "model" ? "AI model" : "Rules engine",
+        source: d.origin === "seeded" ? "Seeded demo" : "PayPal sandbox",
+      });
+      for (const i of a?.items ?? [])
+        evidence.push({ id: `${d.id}:${i.key}`, disputeId: d.id, requirement: i.label, status: i.status.replace("_", " "), critical: i.critical ? "Critical" : "Supporting", weight: i.weight });
+    }
+    return { disputes: rows, evidence };
   }
 
   async takeGlobal(): Promise<boolean> {

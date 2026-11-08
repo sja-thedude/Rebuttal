@@ -10,6 +10,8 @@ export interface Env {
   PAYPAL_CLIENT_SECRET?: string;
   OPENROUTER_API_KEY?: string;
   OPENROUTER_MODEL?: string;
+  /** Models for the AG Studio dashboard agents, whose larger tool schemas need a stronger model. */
+  OPENROUTER_STUDIO_MODEL?: string;
 }
 
 const COOKIE = "rb_ws";
@@ -73,6 +75,27 @@ async function route(req: Request, path: string, ws: DurableObjectStub<Workspace
   }
 
   if (m === "GET" && path === "/api/workspace") return Response.json(await ws.info());
+  if (m === "GET" && path === "/api/workspace/analytics") return Response.json(await ws.analytics());
+
+  // OpenAI Responses-format proxy for the AG Studio agent framework: the browser-side adapter posts
+  // here, the key stays on the server, and the configured OpenRouter models answer.
+  if (m === "POST" && path === "/api/studio/responses") {
+    if (!env.OPENROUTER_API_KEY || !env.OPENROUTER_MODEL) return fail(503, "The dashboard agents aren't configured on this deployment.");
+    if (!(await ws.takeStudioTurn())) return fail(429, "Today's limit for dashboard agent requests is used up. It resets tomorrow.");
+    const b = await body<Record<string, unknown>>();
+    const models = (env.OPENROUTER_STUDIO_MODEL ?? env.OPENROUTER_MODEL).split(",").map((x) => x.trim()).filter(Boolean);
+    let res: Response | null = null;
+    for (const model of models) {
+      res = await fetch("https://openrouter.ai/api/v1/responses", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${env.OPENROUTER_API_KEY}`, "Content-Type": "application/json", "HTTP-Referer": "https://rebuttal.sjapathway.workers.dev", "X-Title": "Rebuttal" },
+        body: JSON.stringify({ ...b, model, reasoning: { effort: "low" }, store: false }),
+      });
+      if (res.ok) break;
+    }
+    if (!res || !res.ok || !res.body) return fail(502, `The dashboard model is busy (${res?.status ?? "no response"}). Try again in a moment.`);
+    return new Response(res.body, { headers: { "Content-Type": res.headers.get("Content-Type") ?? "text/event-stream", "Cache-Control": "no-cache, no-transform" } });
+  }
   if (m === "POST" && path === "/api/workspace/reset") {
     await ws.reset();
     return Response.json(await ws.info());

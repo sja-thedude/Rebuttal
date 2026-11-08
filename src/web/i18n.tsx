@@ -236,6 +236,16 @@ const en = {
   "settle.saves": "Saves {v} versus a full refund",
   "detail.payloadSettle": "Sending a settlement offer sends this request.",
   "toast.settled": "Settlement offer sent",
+  "studio.eyebrow": "AG Studio · AI dashboards",
+  "studio.title": "Dispute analytics",
+  "studio.body": "Live dashboards over your dispute book. Edit any widget, or ask the agents to build one: Studio's team runs on Rebuttal's model, with a dispute analyst that can read case files.",
+  "studio.ask": "Ask the dashboard agents",
+  "studio.refresh": "Reload data",
+  "view.queue": "Queue",
+  "view.analytics": "Analytics",
+  "studio.pOverview": "Overview",
+  "studio.pEvidence": "Evidence gaps",
+  "studio.pDeadlines": "Deadlines",
 };
 
 type Dict = Record<keyof typeof en, string>;
@@ -457,6 +467,16 @@ const ar: Dict = {
   "settle.saves": "يوفّر {v} مقارنة بالاسترداد الكامل",
   "detail.payloadSettle": "إرسال عرض التسوية يرسل هذا الطلب.",
   "toast.settled": "تم إرسال عرض التسوية",
+  "studio.eyebrow": "AG Studio · لوحات ذكية",
+  "studio.title": "تحليلات النزاعات",
+  "studio.body": "لوحات حية فوق سجل نزاعاتك. عدّل أي عنصر أو اطلب من الوكلاء بناءه: فريق Studio يعمل على نموذج Rebuttal مع محلل نزاعات يقرأ ملفات القضايا.",
+  "studio.ask": "اسأل وكلاء اللوحة",
+  "studio.refresh": "إعادة تحميل البيانات",
+  "view.queue": "القائمة",
+  "view.analytics": "التحليلات",
+  "studio.pOverview": "نظرة عامة",
+  "studio.pEvidence": "فجوات الأدلة",
+  "studio.pDeadlines": "المواعيد النهائية",
 };
 
 const fr: Dict = {
@@ -676,6 +696,16 @@ const fr: Dict = {
   "settle.saves": "Économise {v} par rapport à un remboursement total",
   "detail.payloadSettle": "Envoyer une offre de règlement envoie cette requête.",
   "toast.settled": "Offre de règlement envoyée",
+  "studio.eyebrow": "AG Studio · tableaux de bord IA",
+  "studio.title": "Analyses des litiges",
+  "studio.body": "Des tableaux de bord vivants sur vos litiges. Modifiez un widget ou demandez aux agents d’en créer : l’équipe de Studio tourne sur le modèle de Rebuttal, avec un analyste qui lit les dossiers.",
+  "studio.ask": "Demander aux agents",
+  "studio.refresh": "Recharger les données",
+  "view.queue": "File",
+  "view.analytics": "Analyses",
+  "studio.pOverview": "Vue d’ensemble",
+  "studio.pEvidence": "Preuves manquantes",
+  "studio.pDeadlines": "Échéances",
 };
 
 const es: Dict = {
@@ -895,6 +925,16 @@ const es: Dict = {
   "settle.saves": "Ahorra {v} frente a un reembolso total",
   "detail.payloadSettle": "Enviar una oferta de acuerdo envía esta solicitud.",
   "toast.settled": "Oferta de acuerdo enviada",
+  "studio.eyebrow": "AG Studio · paneles con IA",
+  "studio.title": "Análisis de disputas",
+  "studio.body": "Paneles en vivo sobre tus disputas. Edita cualquier widget o pide a los agentes que creen uno: el equipo de Studio usa el modelo de Rebuttal, con un analista que lee los expedientes.",
+  "studio.ask": "Preguntar a los agentes",
+  "studio.refresh": "Recargar datos",
+  "view.queue": "Cola",
+  "view.analytics": "Análisis",
+  "studio.pOverview": "Resumen",
+  "studio.pEvidence": "Pruebas faltantes",
+  "studio.pDeadlines": "Plazos",
 };
 
 const DICTS: Record<Lang, Dict> = { en, ar, fr, es };
