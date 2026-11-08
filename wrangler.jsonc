@@ -15,6 +15,6 @@
     ]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Workspace", "SandboxWorkspace"] }],
-  "vars": { "OPENROUTER_MODEL": "nvidia/nemotron-3.5-lightning:free,openai/gpt-oss-120b" },
+  "vars": { "OPENROUTER_MODEL": "nvidia/nemotron-3.5-lightning:free,openai/gpt-oss-120b", "OPENROUTER_STUDIO_MODEL": "openai/gpt-oss-120b,nvidia/nemotron-3.5-lightning:free" },
   "observability": { "enabled": true }
 }

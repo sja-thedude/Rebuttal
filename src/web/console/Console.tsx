@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgGridReact } from "ag-grid-react";
 import {
   CellSpanModule,
@@ -64,6 +64,9 @@ ModuleRegistry.registerModules([
   CellSpanModule,
   ...(import.meta.env.DEV ? [ValidationModule] : []),
 ]);
+// AG Studio is a large chunk; it loads only when the analytics view opens.
+const Analytics = lazy(() => import("../studio/Analytics"));
+
 const readInsights = () => {
   try {
     return localStorage.getItem("rb-insights") !== "0";
@@ -201,6 +204,17 @@ export default function Console() {
   };
   const gridApi = useRef<GridApi<GridRow> | null>(null);
   const [grid, setGrid] = useState<GridApi<GridRow> | null>(null);
+  const [view, setView] = useState<"queue" | "analytics">(() => (location.hash === "#analytics" ? "analytics" : "queue"));
+  useEffect(() => {
+    // The dashboard has its own agent chat, so the floating assistant steps aside there.
+    document.body.dataset.view = view;
+    return () => {
+      delete document.body.dataset.view;
+    };
+  }, [view]);
+  useEffect(() => {
+    history.replaceState(null, "", view === "analytics" ? `${location.pathname}${location.search}#analytics` : `${location.pathname}${location.search}`);
+  }, [view]);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const toggleRow = useCallback((id: string, open?: boolean) => {
     setExpanded((cur) => {
@@ -485,6 +499,7 @@ export default function Console() {
 
   const openCase = (id: string) => {
     setLive(null);
+    setView("queue");
     setFilter("all");
     setQuick("");
     gridApi.current?.setFilterModel(null);
@@ -575,6 +590,15 @@ export default function Console() {
           </div>
         ) : (
           <>
+            <Seg
+              label="View"
+              value={view}
+              onChange={setView}
+              options={[
+                { v: "queue", label: t("view.queue") },
+                { v: "analytics", label: `${t("view.analytics")} · AG Studio` },
+              ]}
+            />
             <section className="kpis" aria-label="Summary">
               {ws ? (
                 <>
@@ -594,6 +618,12 @@ export default function Console() {
               )}
             </section>
 
+            {view === "analytics" ? (
+              <Suspense fallback={<div className="card analytics-loading"><span className="skel" style={{ height: 520, borderRadius: 18 }} /></div>}>
+                <Analytics mode={mode} />
+              </Suspense>
+            ) : (
+              <>
             <div id="insights" className={`insights-wrap${showInsights && ws ? " open" : ""}`} aria-hidden={!showInsights}>
               <div>{ws && showInsights && <Insights api={grid} rows={rows} />}</div>
             </div>
@@ -719,6 +749,8 @@ export default function Console() {
                 </div>
               )}
             </section>
+              </>
+            )}
             <p className="legal small">
               <IconClock /> {t("ws.notLegal")}
             </p>

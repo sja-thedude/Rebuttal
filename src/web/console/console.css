@@ -397,3 +397,4 @@ kbd { font: 500 11px/1 var(--font-mono); padding: 3px 6px; border-radius: 5px; b
 [data-theme="dark"] .btn-settle { color: #241703; }
 .btn-settle:hover:not(:disabled) { filter: brightness(1.08); }
 .settle-sent { margin-top: 14px; }
+.console .seg[aria-label="View"] { margin-bottom: 16px; }
