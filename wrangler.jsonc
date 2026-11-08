@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "rebuttal",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "WORKSPACE", "class_name": "Workspace" },
+      { "name": "SANDBOX", "class_name": "SandboxWorkspace" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Workspace", "SandboxWorkspace"] }],
+  "vars": { "OPENROUTER_MODEL": "nvidia/nemotron-3.5-lightning:free,openai/gpt-oss-120b", "OPENROUTER_STUDIO_MODEL": "openai/gpt-oss-120b,nvidia/nemotron-3.5-lightning:free" },
+  "observability": { "enabled": true }
+}

@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+
+# Duplicate copies made by file sync (e.g. "file 2.ts")
+* 2.*
+* 2
