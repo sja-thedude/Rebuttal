@@ -13,5 +13,5 @@
     "tsBuildInfoFile": "node_modules/.tmp/worker.tsbuildinfo"
   },
   "include": ["src/worker", "src/shared"],
-  "exclude": ["**/* 2.*"]
+  "exclude": ["**/* [0-9].*"]
 }
