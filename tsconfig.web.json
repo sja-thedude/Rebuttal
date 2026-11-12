@@ -14,5 +14,5 @@
     "tsBuildInfoFile": "node_modules/.tmp/web.tsbuildinfo"
   },
   "include": ["src/web", "src/shared"],
-  "exclude": ["**/* 2.*"]
+  "exclude": ["**/* [0-9].*"]
 }
