@@ -370,7 +370,7 @@ textarea.editor:focus { outline: none; border-color: var(--accent); box-shadow: 
 .chat-fab:hover { transform: translateY(-2px); }
 .chat-fab:hover svg { transform: rotate(90deg) scale(1.1); }
 .chat-fab:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 3px; }
-.chat-fab.hidden { opacity: 0; transform: scale(0.6) translateY(20px); pointer-events: none; }
+.chat-fab.hidden { display: none; }
 .chat-fab.pulse::before { content: ""; position: absolute; inset: 0; border-radius: inherit; border: 2px solid var(--accent); animation: fab-ring 2.2s var(--ease) infinite; }
 @keyframes fab-in { from { opacity: 0; transform: translateY(24px) scale(0.8); } to { opacity: 1; transform: none; } }
 @keyframes fab-ring { 0% { opacity: 0.8; transform: scale(1); } 100% { opacity: 0; transform: scale(1.35); } }
@@ -443,4 +443,4 @@ textarea.editor:focus { outline: none; border-color: var(--accent); box-shadow: 
 .chat-filter { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--bg-sunk); color: var(--ink-2); border: 1px dashed var(--line-strong); }
 body[data-view="analytics"] .chat-fab { display: none; }
 /* The floating assistant steps aside while a dialog is open, so it never covers the dialog's actions. */
-body:has(.sheet-backdrop) .chat-fab, body:has(.palette-backdrop) .chat-fab { opacity: 0; transform: scale(0.6); pointer-events: none; }
+body:has(.sheet-backdrop) .chat-fab, body:has(.palette-backdrop) .chat-fab { display: none; }
