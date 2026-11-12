@@ -442,3 +442,5 @@ textarea.editor:focus { outline: none; border-color: var(--accent); box-shadow: 
 .chat-action-filters { display: flex; flex-wrap: wrap; gap: 6px; }
 .chat-filter { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--bg-sunk); color: var(--ink-2); border: 1px dashed var(--line-strong); }
 body[data-view="analytics"] .chat-fab { display: none; }
+/* The floating assistant steps aside while a dialog is open, so it never covers the dialog's actions. */
+body:has(.sheet-backdrop) .chat-fab, body:has(.palette-backdrop) .chat-fab { opacity: 0; transform: scale(0.6); pointer-events: none; }
