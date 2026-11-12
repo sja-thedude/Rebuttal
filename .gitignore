@@ -10,5 +10,5 @@ dist/
 *.log
 
 # Duplicate copies made by file sync (e.g. "file 2.ts")
-* 2.*
-* 2
+* [0-9].*
+* [0-9]
