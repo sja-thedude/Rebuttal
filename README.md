@@ -2,6 +2,8 @@
 
 **Live demo: [rebuttal.sjapathway.workers.dev](https://rebuttal.sjapathway.workers.dev)**
 
+**Demo video: [youtu.be/nUB-bMizvbA](https://youtu.be/nUB-bMizvbA)**
+
 An AI agent that defends merchants against PayPal payment disputes. It reads each dispute's reason code, works out which evidence would answer it, pulls that evidence from the transaction record, drafts the seller response in the structure PayPal accepts, and tells the merchant honestly whether the case is worth fighting, settling or conceding. Nothing is sent to PayPal without the merchant's approval.
 
 No account is needed to try it: the console opens on a demo workspace of 40 seeded disputes, and a PayPal sandbox workspace runs the same agent on real sandbox disputes.
